@@ -1,13 +1,14 @@
 <script setup>
 import { computed, ref } from 'vue'
-import { MOTOS } from '../lib/config'
 import PinGate from '../components/PinGate.vue'
 import ConfirmarReemplazo from '../components/ConfirmarReemplazo.vue'
 import { supabase, configurado } from '../lib/supabase'
 
 const empleado = ref(null)
 const pin = ref('')
-const matricula = ref('')
+const entrada = ref(null) // { matricula, hora } de la entrada de este turno
+const cargandoEntrada = ref(false)
+const sinEntrada = ref(false)
 const hayIncidencia = ref(null)
 const incidencia = ref('')
 const afecta = ref(null)
@@ -17,23 +18,33 @@ const error = ref('')
 const enviado = ref(false)
 const duplicado = ref(null) // { hora } si ya existe un registro de este tipo en el día
 
-const matriculaLimpia = computed(() => matricula.value.toUpperCase().replace(/\s+/g, ' ').trim())
 const valido = computed(
   () =>
     empleado.value &&
-    matriculaLimpia.value.length >= 3 &&
+    entrada.value &&
     hayIncidencia.value !== null &&
     (!hayIncidencia.value || (incidencia.value.trim() && afecta.value !== null)),
 )
 
-function identificado(datos) {
+async function identificado(datos) {
   empleado.value = datos.empleado
   pin.value = datos.pin
+  entrada.value = null
+  sinEntrada.value = false
+  error.value = ''
+  cargandoEntrada.value = true
+  const { data, error: err } = await supabase.rpc('entrada_del_turno', { p_pin: pin.value, p_empleado: empleado.value.id })
+  cargandoEntrada.value = false
+  if (err) { error.value = 'No se pudo comprobar tu entrada. Inténtalo de nuevo.'; return }
+  if (data.length) entrada.value = data[0]
+  else sinEntrada.value = true
 }
 
 function cambiarEmpleado() {
   empleado.value = null
   pin.value = ''
+  entrada.value = null
+  sinEntrada.value = false
 }
 
 async function enviar(reemplazar = false) {
@@ -44,7 +55,7 @@ async function enviar(reemplazar = false) {
     p_pin: pin.value,
     p_empleado: empleado.value.id,
     p_tipo: 'salida',
-    p_matricula: matriculaLimpia.value,
+    p_matricula: entrada.value.matricula,
     p_checks: null,
     p_incidencia: hayIncidencia.value ? incidencia.value.trim() : null,
     p_afecta: hayIncidencia.value ? afecta.value : false,
@@ -53,6 +64,7 @@ async function enviar(reemplazar = false) {
   })
   enviando.value = false
   if (err) {
+    if (err.code === 'SE001') { sinEntrada.value = true; entrada.value = null; return }
     if (err.code === 'YA001') { duplicado.value = { hora: err.details || '' }; return }
     if (err.code === '28000') { error.value = 'Tu PIN ya no es válido. Vuelve a identificarte.'; cambiarEmpleado() }
     else error.value = 'No se pudo enviar. Inténtalo de nuevo.'
@@ -72,6 +84,15 @@ async function enviar(reemplazar = false) {
 
   <PinGate v-else-if="!empleado" @listo="identificado" />
 
+  <div v-else-if="sinEntrada" class="card">
+    <strong>{{ empleado.nombre }}</strong>
+    <div class="aviso">
+      Aún no has registrado tu entrada de hoy. Para registrar la salida, primero tienes que registrar la entrada.
+    </div>
+    <router-link class="btn full" to="/entrada">Ir a registrar la entrada</router-link>
+    <button type="button" class="sec full" style="margin-top:.6rem" @click="cambiarEmpleado">Salir</button>
+  </div>
+
   <form v-else @submit.prevent="enviar()">
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem">
@@ -81,11 +102,11 @@ async function enviar(reemplazar = false) {
         </div>
         <button type="button" class="sec" style="padding:.4rem .8rem" @click="cambiarEmpleado">Salir</button>
       </div>
-      <label for="m">Ciclomotor (matrícula)</label>
-      <select id="m" v-model="matricula" required>
-        <option value="" disabled>Selecciona la moto</option>
-        <option v-for="m in MOTOS" :key="m">{{ m }}</option>
-      </select>
+      <p v-if="cargandoEntrada" style="margin:.8rem 0 0">Comprobando tu entrada…</p>
+      <p v-else-if="entrada" style="margin:.8rem 0 0">
+        Ciclomotor: <strong>{{ entrada.matricula }}</strong><br />
+        <small>El de tu entrada de hoy, registrada a las {{ entrada.hora }}.</small>
+      </p>
     </div>
 
     <div class="card">

@@ -62,7 +62,7 @@ Hay **dos códigos QR**, uno para cada momento del turno:
 | QR | Ruta | Qué se registra |
 |---|---|---|
 | **Entrada** | `/#/entrada` | Revisión previa de los 11 elementos de la moto (Bien / Mal) y, si algo falla, la incidencia y si afecta a la seguridad. |
-| **Salida** | `/#/salida` | Fin del servicio y, si la hubo, la incidencia o avería ocurrida durante el reparto. |
+| **Salida** | `/#/salida` | Fin del servicio y, si la hubo, la incidencia o avería ocurrida durante el reparto. Solo se puede registrar si ese día hay una entrada, y usa la moto de la entrada. |
 
 El administrador entra en `/#/admin` con su contraseña.
 
@@ -70,7 +70,8 @@ El administrador entra en `/#/admin` con su contraseña.
 
 **Para los empleados**
 - Acceso con **PIN personal de 4 dígitos** (único e intransferible): no hay que escribir el nombre, la aplicación sabe quién es.
-- Selección de la **moto** entre las disponibles.
+- Selección de la **moto** entre las disponibles al registrar la entrada.
+- La **salida** solo se puede registrar si ese día ya hay una **entrada**, y se hace automáticamente **con la moto de la entrada**: no hay que volver a elegirla.
 - Checklist de 11 elementos con botones grandes **Bien / Mal**, pensado para usarse con una mano.
 - Si hay un elemento en mal estado, pide una descripción y avisa de que, si afecta a la seguridad, **no debe usarse la moto** hasta su revisión.
 - Si ya registró la entrada (o la salida) de ese día, la aplicación **avisa antes de guardar** y pregunta si quiere sustituirla por la nueva.
@@ -87,10 +88,11 @@ El administrador entra en `/#/admin` con su contraseña.
 
 Pensadas para el día a día real de la tienda:
 
+- **La salida exige una entrada.** Un empleado solo puede registrar la salida si ese día de trabajo ya registró su entrada; si no, la aplicación se lo indica y le lleva a registrarla. La salida se guarda siempre **con la moto de la entrada**. Si la entrada se sustituye por otra con distinta moto, la salida de ese día se actualiza también.
 - **Un registro de entrada y uno de salida por empleado y día.** No se pueden crear dos entradas, ni dos salidas, para el mismo día. Vale tanto para los empleados como para el administrador.
 - **Aviso antes de sustituir.** Si un empleado intenta registrar una entrada (o salida) cuando ya tiene una ese día, ve un mensaje como *«Ya registraste tu entrada de hoy (a las 09:02). ¿Quieres sustituirla por esta nueva entrada ahora mismo?»*. Si confirma, la anterior se sustituye por la nueva; si cancela, no cambia nada.
 - **Turnos de madrugada.** Como el reparto puede terminar pasada la medianoche, **las salidas registradas hasta la 1:30 de la madrugada (hora de Madrid) cuentan para el día anterior**. Así la salida queda en el mismo día de trabajo que su entrada, en el listado y en la hoja PDF. La hora real se conserva y el panel la marca como *«madrugada siguiente»*.
-- **El administrador tiene la última palabra.** Puede modificar o eliminar cualquier registro. Al modificarlo se aplican las mismas reglas: no puede dejar dos registros del mismo tipo en un día. Eliminar pide confirmación y no se puede deshacer.
+- **El administrador tiene la última palabra.** Puede modificar o eliminar cualquier registro. Si una salida tiene su entrada ese día, su moto queda fijada a la de la entrada. Al modificarlo se aplican las mismas reglas: no puede dejar dos registros del mismo tipo en un día. Eliminar pide confirmación y no se puede deshacer.
 
 ## Capturas de pantalla
 
@@ -115,6 +117,12 @@ Pensadas para el día a día real de la tienda:
 
 <p align="center">
   <img src="docs/img/08-duplicado.png" alt="Aviso: ya existe una entrada hoy, ¿quieres sustituirla?" width="300">
+</p>
+
+### Salida sin haber registrado la entrada
+
+<p align="center">
+  <img src="docs/img/11-sin-entrada.png" alt="Aviso: primero hay que registrar la entrada" width="300">
 </p>
 
 ### Panel de administración
@@ -179,7 +187,7 @@ flowchart TB
     end
 
     subgraph Supabase["☁️ Supabase"]
-        R["Funciones RPC<br/>verificar_pin · registrar_turno"]
+        R["Funciones RPC<br/>verificar_pin · entrada_del_turno<br/>registrar_turno"]
         AU["Auth (administrador)"]
         DB[("PostgreSQL + RLS<br/>empleados · registros")]
     end
@@ -191,7 +199,7 @@ flowchart TB
     A --> P
 ```
 
-Los empleados **no leen ni escriben directamente en las tablas**: solo pueden llamar a dos funciones, que comprueban el PIN y aplican las reglas (un registro por día, turnos de madrugada) en el servidor. El administrador se autentica con Supabase Auth y es el único con acceso a la lista de empleados.
+Los empleados **no leen ni escriben directamente en las tablas**: solo pueden llamar a dos funciones, que comprueban el PIN y aplican las reglas (un registro por día, la salida con la moto de la entrada, turnos de madrugada) en el servidor. El administrador se autentica con Supabase Auth y es el único con acceso a la lista de empleados.
 
 ## Estructura del proyecto
 

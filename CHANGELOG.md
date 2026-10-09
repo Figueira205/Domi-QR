@@ -3,6 +3,14 @@
 Todos los cambios relevantes del proyecto se documentan en este archivo.
 El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 
+## [1.2.0] - 2026-10-09
+
+### Añadido
+- **La salida solo se puede registrar si ese día hay una entrada** del empleado. Si no la hay, la aplicación lo indica y ofrece ir a registrarla.
+- **La salida usa siempre la moto de la entrada** (el empleado ya no la elige). Si la entrada se sustituye por otra moto, la salida de ese día se actualiza.
+- En el panel de administración, las salidas con entrada ese día quedan fijadas a la moto de la entrada.
+- Función `entrada_del_turno`, que indica al formulario de salida la entrada y la moto del turno.
+
 ## [1.1.0] - 2026-10-09
 
 ### Añadido

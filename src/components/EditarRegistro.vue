@@ -1,8 +1,8 @@
 <script setup>
-import { computed, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ELEMENTOS, MOTOS } from '../lib/config'
 import { supabase } from '../lib/supabase'
-import { instanteDeDia, registroExistente, fechaCorta } from '../lib/dias'
+import { instanteDeDia, registroExistente, fechaCorta, entradaDelDia } from '../lib/dias'
 
 const props = defineProps({
   registro: { type: Object, required: true },
@@ -22,11 +22,27 @@ const incidencia = ref(r.incidencia ?? '')
 const afecta = ref(Boolean(r.afecta_seguridad))
 const actuacion = ref(r.actuacion ?? '')
 const guardando = ref(false)
+const motoEntrada = ref(null) // en una salida: la moto de la entrada de ese día
 const error = ref('')
 
 const motos = computed(() => (MOTOS.includes(matricula.value) ? MOTOS : [matricula.value, ...MOTOS]))
 const esEntrada = r.tipo === 'entrada'
 const hayMal = computed(() => esEntrada && Object.values(checks).some((v) => v === false))
+// Una salida debe llevar la moto de la entrada de ese mismo día
+async function buscarMotoEntrada() {
+  motoEntrada.value = null
+  if (r.tipo !== 'salida' || !empleadoId.value || !dia.value) return
+  try {
+    const e = await entradaDelDia({ empleadoId: empleadoId.value, dia: dia.value })
+    motoEntrada.value = e?.matricula ?? null
+    if (e) matricula.value = e.matricula
+  } catch {
+    motoEntrada.value = null
+  }
+}
+onMounted(buscarMotoEntrada)
+watch([empleadoId, dia], buscarMotoEntrada)
+
 const valido = computed(() => empleadoId.value && dia.value && matricula.value && (!hayMal.value || incidencia.value.trim()))
 
 async function guardar() {
@@ -56,8 +72,13 @@ async function guardar() {
   }
   if (dia.value !== r.dia) cambios.created_at = instanteDeDia(dia.value, r.tipo) // si se cambia de día, se mueve la hora con él
   const { error: err } = await supabase.from('registros').update(cambios).eq('id', r.id)
+  if (err) { guardando.value = false; error.value = 'No se pudo guardar los cambios.'; return }
+  // Si se cambia la moto de una entrada, la salida de ese día pasa a llevar la misma
+  if (esEntrada) {
+    await supabase.from('registros').update({ matricula: matricula.value })
+      .eq('empleado_id', emp.id).eq('tipo', 'salida').eq('dia', dia.value)
+  }
   guardando.value = false
-  if (err) { error.value = 'No se pudo guardar los cambios.'; return }
   emit('guardado')
 }
 </script>
@@ -79,9 +100,10 @@ async function guardar() {
       </div>
     </div>
     <label>Ciclomotor</label>
-    <select v-model="matricula" required>
+    <select v-model="matricula" required :disabled="Boolean(motoEntrada)">
       <option v-for="m in motos" :key="m">{{ m }}</option>
     </select>
+    <small v-if="motoEntrada">La salida usa la moto de la entrada de ese día. Para cambiarla, modifica la entrada.</small>
 
     <template v-if="esEntrada">
       <label>Estado de la moto</label>
