@@ -19,7 +19,7 @@ La hora se guarda automáticamente al enviar; no se pide al usuario.
 
 ## Despliegue en GitHub Pages
 - *Settings > Pages > Source: GitHub Actions*.
-- *Settings > Secrets and variables > Actions*: añade `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_ADMIN_EMAIL`.
+- Las variables públicas (URL, clave publishable y correo del admin) están en `.env.production`; no hacen falta secretos. Nunca pongas ahí la clave `service_role` ni contraseñas.
 - Al hacer push a `main` se publica. Los QR apuntan a `https://<usuario>.github.io/<repo>/#/entrada` y `.../#/salida`.
 
 ## Personalizar
