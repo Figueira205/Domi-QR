@@ -34,3 +34,17 @@ export async function registroExistente({ empleadoId, tipo, dia, exceptoId = nul
   if (error) throw error
   return data[0] ?? null
 }
+
+// Moto de la entrada de ese empleado ese día (o null si no hay entrada)
+export async function entradaDelDia({ empleadoId, dia }) {
+  const { data, error } = await supabase
+    .from('registros')
+    .select('matricula')
+    .eq('empleado_id', empleadoId)
+    .eq('tipo', 'entrada')
+    .eq('dia', dia)
+    .order('created_at', { ascending: false })
+    .limit(1)
+  if (error) throw error
+  return data[0] ?? null
+}

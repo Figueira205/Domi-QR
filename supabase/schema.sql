@@ -88,8 +88,36 @@ as $$
   select e.id, e.nombre from public.empleados e where e.pin = p_pin order by e.nombre;
 $$;
 
+-- Entrada del turno actual del empleado (el formulario de salida la usa para saber la moto).
+create or replace function public.entrada_del_turno(p_pin text, p_empleado uuid)
+returns table (matricula text, hora text)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_local timestamp := timezone('Europe/Madrid', now());
+  v_dia date;
+begin
+  if not exists (select 1 from public.empleados where id = p_empleado and pin = p_pin) then
+    raise exception 'PIN incorrecto' using errcode = '28000';
+  end if;
+  v_dia := v_local::date;
+  if v_local::time < time '01:31' then
+    v_dia := v_dia - 1;
+  end if;
+  return query
+    select r.matricula, to_char(timezone('Europe/Madrid', r.created_at), 'HH24:MI')
+    from public.registros r
+    where r.empleado_id = p_empleado and r.tipo = 'entrada' and r.dia = v_dia
+    order by r.created_at desc
+    limit 1;
+end;
+$$;
+
 -- Registra la entrada o salida del día validando el PIN del empleado.
 --  · Un registro por empleado, tipo y día de trabajo.
+--  · La salida exige una entrada ese día (error SE001) y usa la moto de la entrada.
 --  · Las salidas hasta la 1:30 (hora de Madrid) cuentan para el día anterior.
 --  · Si ya existe, lanza el error YA001 (con la hora del existente en `detail`);
 --    con p_reemplazar = true, sustituye el registro existente por el nuevo.
@@ -109,6 +137,7 @@ declare
   v_dia date;
   v_id uuid;
   v_hora timestamptz;
+  v_matricula text := upper(trim(p_matricula));
 begin
   select nombre into v_nombre from public.empleados where id = p_empleado and pin = p_pin;
   if v_nombre is null then
@@ -124,6 +153,18 @@ begin
     v_dia := v_dia - 1;
   end if;
 
+  -- La salida exige una entrada ese día y se registra con la moto de la entrada
+  if p_tipo = 'salida' then
+    select matricula into v_matricula
+    from public.registros
+    where empleado_id = p_empleado and tipo = 'entrada' and dia = v_dia
+    order by created_at desc
+    limit 1;
+    if v_matricula is null then
+      raise exception 'SIN_ENTRADA' using errcode = 'SE001';
+    end if;
+  end if;
+
   select id, created_at into v_id, v_hora
   from public.registros
   where empleado_id = p_empleado and tipo = p_tipo and dia = v_dia
@@ -137,7 +178,7 @@ begin
     end if;
     update public.registros
     set conductor = v_nombre,
-        matricula = upper(trim(p_matricula)),
+        matricula = v_matricula,
         checks = p_checks,
         incidencia = nullif(trim(coalesce(p_incidencia, '')), ''),
         afecta_seguridad = coalesce(p_afecta, false),
@@ -146,16 +187,24 @@ begin
     where id = v_id;
   else
     insert into public.registros (tipo, conductor, empleado_id, matricula, checks, incidencia, afecta_seguridad, actuacion, dia)
-    values (p_tipo, v_nombre, p_empleado, upper(trim(p_matricula)), p_checks,
+    values (p_tipo, v_nombre, p_empleado, v_matricula, p_checks,
             nullif(trim(coalesce(p_incidencia, '')), ''), coalesce(p_afecta, false),
             nullif(trim(coalesce(p_actuacion, '')), ''), v_dia);
+  end if;
+
+  -- Si se cambia la moto de la entrada, la salida de ese día debe llevar la misma
+  if p_tipo = 'entrada' then
+    update public.registros set matricula = v_matricula
+    where empleado_id = p_empleado and tipo = 'salida' and dia = v_dia and matricula <> v_matricula;
   end if;
 end;
 $$;
 
 revoke all on function public.verificar_pin(text) from public;
+revoke all on function public.entrada_del_turno(text, uuid) from public;
 revoke all on function public.registrar_turno(text, uuid, text, text, jsonb, text, boolean, text, boolean) from public;
 grant execute on function public.verificar_pin(text) to anon, authenticated;
+grant execute on function public.entrada_del_turno(text, uuid) to anon, authenticated;
 grant execute on function public.registrar_turno(text, uuid, text, text, jsonb, text, boolean, text, boolean) to anon, authenticated;
 
 -- ---------------------------------------------------------------------

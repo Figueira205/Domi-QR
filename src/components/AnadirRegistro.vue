@@ -1,8 +1,8 @@
 <script setup>
-import { computed, reactive, ref } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { ELEMENTOS, MOTOS } from '../lib/config'
 import { supabase } from '../lib/supabase'
-import { instanteDeDia, registroExistente, fechaCorta } from '../lib/dias'
+import { instanteDeDia, registroExistente, fechaCorta, entradaDelDia } from '../lib/dias'
 
 const props = defineProps({ empleados: { type: Array, required: true } })
 const emit = defineEmits(['guardado'])
@@ -14,6 +14,7 @@ const empleadoId = ref('')
 const fecha = ref('')
 const tipo = ref('entrada')
 const matricula = ref('')
+const motoEntrada = ref(null) // moto de la entrada de ese día, si ya existe (la salida debe usarla)
 const checks = reactive(Object.fromEntries(ELEMENTOS.map((e) => [e.key, true])))
 const incidencia = ref('')
 const afecta = ref(false)
@@ -26,6 +27,19 @@ const matriculaLimpia = computed(() => matricula.value.toUpperCase().replace(/\s
 const valido = computed(
   () => empleadoId.value && fecha.value && matriculaLimpia.value.length >= 3 && (!hayMal.value || incidencia.value.trim()),
 )
+
+// La salida lleva la moto de la entrada de ese día
+watch([empleadoId, fecha, tipo], async () => {
+  motoEntrada.value = null
+  if (tipo.value !== 'salida' || !empleadoId.value || !fecha.value) return
+  try {
+    const e = await entradaDelDia({ empleadoId: empleadoId.value, dia: fecha.value })
+    motoEntrada.value = e?.matricula ?? null
+    if (e) matricula.value = e.matricula
+  } catch {
+    motoEntrada.value = null
+  }
+})
 
 async function guardar() {
   error.value = ''
@@ -91,12 +105,15 @@ async function guardar() {
         </div>
         <div>
           <label>Ciclomotor</label>
-          <select v-model="matricula" required>
+          <select v-model="matricula" required :disabled="Boolean(motoEntrada)">
             <option value="" disabled>Selecciona</option>
             <option v-for="m in MOTOS" :key="m">{{ m }}</option>
           </select>
         </div>
       </div>
+
+      <p v-if="tipo === 'salida' && motoEntrada"><small>La salida usa la moto de la entrada de ese día ({{ motoEntrada }}).</small></p>
+      <p v-else-if="tipo === 'salida' && empleadoId && fecha"><small>⚠ Ese empleado no tiene entrada ese día. Si puedes, añade primero la entrada.</small></p>
 
       <template v-if="tipo === 'entrada'">
         <label>Estado de la moto ese día</label>
