@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { CONDUCTORES, ELEMENTOS } from '../lib/config'
 import { supabase, configurado, ADMIN_EMAIL } from '../lib/supabase'
-import { generarPdfMensual } from '../lib/pdf'
+import { generarInformeQuincenal, rangoQuincena } from '../lib/pdf'
 
 const sesion = ref(false)
 const password = ref('')
@@ -18,6 +18,8 @@ const filtros = ref({
   tipo: '',
   mes: `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}`,
 })
+const quincena = ref(hoy.getDate() <= 15 ? 1 : 2)
+const generando = ref(false)
 
 const labels = Object.fromEntries(ELEMENTOS.map((e) => [e.key, e.label]))
 const fmt = (iso) => new Date(iso).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' })
@@ -68,17 +70,24 @@ async function salir() {
 }
 
 async function descargarPdf() {
-  if (!matriculaFiltro.value) { error.value = 'Escribe una matrícula completa para generar el PDF.'; return }
   error.value = ''
-  const { data, error: err } = await supabase
+  generando.value = true
+  const [a, m] = filtros.value.mes.split('-').map(Number)
+  const [d1, d2] = rangoQuincena(filtros.value.mes, quincena.value)
+  let q = supabase
     .from('registros')
     .select('*')
-    .eq('matricula', matriculaFiltro.value)
-    .gte('created_at', rangoMes(filtros.value.mes)[0])
-    .lt('created_at', rangoMes(filtros.value.mes)[1])
+    .eq('tipo', 'entrada')
+    .gte('created_at', new Date(a, m - 1, d1).toISOString())
+    .lt('created_at', new Date(a, m - 1, d2 + 1).toISOString())
     .order('created_at')
-  if (err) { error.value = 'No se pudieron cargar los datos del PDF.'; return }
-  generarPdfMensual({ registros: data, matricula: matriculaFiltro.value, mes: filtros.value.mes })
+    .limit(5000)
+  if (matriculaFiltro.value) q = q.eq('matricula', matriculaFiltro.value)
+  const { data, error: err } = await q
+  generando.value = false
+  if (err) { error.value = 'No se pudieron cargar los datos del informe.'; return }
+  const ok = generarInformeQuincenal({ registros: data, mes: filtros.value.mes, quincena: quincena.value })
+  if (!ok) error.value = 'No hay registros de entrada en esa quincena.'
 }
 
 onMounted(async () => {
@@ -127,12 +136,19 @@ onMounted(async () => {
           <input v-model="filtros.mes" type="month" @change="cargar" />
         </div>
       </div>
-      <div class="grid2" style="margin-top:.8rem">
-        <button class="sec" @click="cargar">Actualizar</button>
-        <button @click="descargarPdf">Descargar PDF del mes</button>
-      </div>
+      <button class="sec full" style="margin-top:.8rem" @click="cargar">Actualizar</button>
+    </div>
+
+    <div class="card">
+      <h2>Informe quincenal (formato oficial)</h2>
+      <label>Quincena del mes seleccionado</label>
+      <select v-model.number="quincena">
+        <option :value="1">1ª quincena (días 1 al 15)</option>
+        <option :value="2">2ª quincena (día 16 al fin de mes)</option>
+      </select>
+      <p style="margin:.6rem 0"><small>Usa el mes y la matrícula de los filtros. Si dejas la matrícula vacía, se genera una hoja por cada ciclomotor con registros.</small></p>
+      <button class="full" :disabled="generando" @click="descargarPdf">{{ generando ? 'Generando…' : 'Generar informe quincenal' }}</button>
       <p v-if="error" class="error">{{ error }}</p>
-      <small>El PDF se genera para la matrícula y el mes seleccionados (formato del checklist en papel).</small>
     </div>
 
     <p v-if="cargando">Cargando…</p>
