@@ -1,9 +1,11 @@
 <script setup>
 import { computed, reactive, ref } from 'vue'
-import { CONDUCTORES, ELEMENTOS, MOTOS } from '../lib/config'
+import { ELEMENTOS, MOTOS } from '../lib/config'
+import PinGate from '../components/PinGate.vue'
 import { supabase, configurado } from '../lib/supabase'
 
-const conductor = ref('')
+const empleado = ref(null)
+const pin = ref('')
 const matricula = ref('')
 const checks = reactive(Object.fromEntries(ELEMENTOS.map((e) => [e.key, null])))
 const incidencia = ref('')
@@ -17,27 +19,41 @@ const sinResponder = computed(() => Object.values(checks).filter((v) => v === nu
 const matriculaLimpia = computed(() => matricula.value.toUpperCase().replace(/\s+/g, ' ').trim())
 const valido = computed(
   () =>
-    conductor.value &&
+    empleado.value &&
     matriculaLimpia.value.length >= 3 &&
     sinResponder.value === 0 &&
     (!hayMal.value || (incidencia.value.trim() && afecta.value !== null)),
 )
 
+function identificado(datos) {
+  empleado.value = datos.empleado
+  pin.value = datos.pin
+}
+
+function cambiarEmpleado() {
+  empleado.value = null
+  pin.value = ''
+}
+
 async function enviar() {
   error.value = ''
   if (!configurado) { error.value = 'La base de datos no está configurada.'; return }
   enviando.value = true
-  const { error: err } = await supabase.from('registros').insert({
-    tipo: 'entrada',
-    conductor: conductor.value,
-    matricula: matriculaLimpia.value,
-    checks: { ...checks },
-    incidencia: hayMal.value ? incidencia.value.trim() : null,
-    afecta_seguridad: hayMal.value ? afecta.value : false,
+  const { error: err } = await supabase.rpc('registrar', {
+    p_pin: pin.value,
+    p_empleado: empleado.value.id,
+    p_tipo: 'entrada',
+    p_matricula: matriculaLimpia.value,
+    p_checks: { ...checks },
+    p_incidencia: hayMal.value ? incidencia.value.trim() : null,
+    p_afecta: hayMal.value ? afecta.value : false,
+    p_actuacion: null,
   })
   enviando.value = false
-  if (err) error.value = 'No se pudo enviar. Inténtalo de nuevo.'
-  else enviado.value = true
+  if (err) {
+    if (err.code === '28000') { error.value = 'Tu PIN ya no es válido. Vuelve a identificarte.'; cambiarEmpleado() }
+    else error.value = 'No se pudo enviar. Inténtalo de nuevo.'
+  } else enviado.value = true
 }
 </script>
 
@@ -48,13 +64,14 @@ async function enviar() {
     ✔ Revisión registrada. {{ afecta ? 'Recuerda: NO uses el ciclomotor y avisa al encargado de turno.' : 'Buen servicio.' }}
   </div>
 
+  <PinGate v-else-if="!empleado" @listo="identificado" />
+
   <form v-else @submit.prevent="enviar">
     <div class="card">
-      <label for="c">Conductor</label>
-      <select id="c" v-model="conductor" required>
-        <option value="" disabled>Selecciona tu nombre</option>
-        <option v-for="c in CONDUCTORES" :key="c">{{ c }}</option>
-      </select>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem">
+        <strong>Hola, {{ empleado.nombre }}</strong>
+        <button type="button" class="sec" style="padding:.4rem .8rem" @click="cambiarEmpleado">Cambiar</button>
+      </div>
       <label for="m">Ciclomotor (matrícula)</label>
       <select id="m" v-model="matricula" required>
         <option value="" disabled>Selecciona la moto</option>
