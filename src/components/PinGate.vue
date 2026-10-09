@@ -7,7 +7,6 @@ const emit = defineEmits(['listo'])
 const pin = ref('')
 const error = ref('')
 const cargando = ref(false)
-const candidatos = ref([])
 
 function soloNumeros() {
   pin.value = pin.value.replace(/\D/g, '').slice(0, 4)
@@ -23,43 +22,27 @@ async function comprobar() {
   cargando.value = false
   if (err) { error.value = 'No se pudo comprobar el PIN. Inténtalo de nuevo.'; return }
   if (!data.length) { error.value = 'PIN incorrecto.'; pin.value = ''; return }
-  if (data.length === 1) { emit('listo', { empleado: data[0], pin: pin.value }); return }
-  candidatos.value = data // varios empleados comparten el PIN: que elija
+  emit('listo', { empleado: data[0], pin: pin.value }) // el PIN es único: identifica a una sola persona
 }
 </script>
 
 <template>
   <div class="card">
-    <template v-if="!candidatos.length">
-      <h2>Introduce tu PIN</h2>
-      <input
-        v-model="pin"
-        type="password"
-        inputmode="numeric"
-        autocomplete="off"
-        maxlength="4"
-        placeholder="••••"
-        style="font-size:2rem;text-align:center;letter-spacing:.5rem"
-        @input="soloNumeros"
-        @keyup.enter="comprobar"
-      />
-      <p v-if="error" class="error">{{ error }}</p>
-      <button class="full" style="margin-top:.8rem" :disabled="pin.length !== 4 || cargando" @click="comprobar">
-        {{ cargando ? 'Comprobando…' : 'Entrar' }}
-      </button>
-    </template>
-    <template v-else>
-      <h2>¿Quién eres?</h2>
-      <p><small>Este PIN lo comparten varios empleados.</small></p>
-      <button
-        v-for="c in candidatos"
-        :key="c.id"
-        class="full"
-        style="margin-bottom:.5rem"
-        @click="emit('listo', { empleado: c, pin })"
-      >
-        {{ c.nombre }}
-      </button>
-    </template>
+    <h2>Introduce tu PIN</h2>
+    <input
+      v-model="pin"
+      type="password"
+      inputmode="numeric"
+      autocomplete="off"
+      maxlength="4"
+      placeholder="••••"
+      style="font-size:2rem;text-align:center;letter-spacing:.5rem"
+      @input="soloNumeros"
+      @keyup.enter="comprobar"
+    />
+    <p v-if="error" class="error">{{ error }}</p>
+    <button class="full" style="margin-top:.8rem" :disabled="pin.length !== 4 || cargando" @click="comprobar">
+      {{ cargando ? 'Comprobando…' : 'Entrar' }}
+    </button>
   </div>
 </template>

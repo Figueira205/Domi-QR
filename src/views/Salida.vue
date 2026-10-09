@@ -68,8 +68,11 @@ async function enviar() {
   <form v-else @submit.prevent="enviar">
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem">
-        <strong>Hola, {{ empleado.nombre }}</strong>
-        <button type="button" class="sec" style="padding:.4rem .8rem" @click="cambiarEmpleado">Cambiar</button>
+        <div>
+          <small>Sesión de</small><br />
+          <strong style="font-size:1.15rem">{{ empleado.nombre }}</strong>
+        </div>
+        <button type="button" class="sec" style="padding:.4rem .8rem" @click="cambiarEmpleado">Salir</button>
       </div>
       <label for="m">Ciclomotor (matrícula)</label>
       <select id="m" v-model="matricula" required>
