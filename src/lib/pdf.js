@@ -4,15 +4,19 @@ import { ELEMENTOS } from './config.js'
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1)
 
+// Día de trabajo del registro (las salidas de madrugada pertenecen al día anterior)
+const diaDelMes = (r) => (r.dia ? Number(r.dia.slice(8, 10)) : new Date(r.created_at).getDate())
+const porDiaYHora = (a, b) => (a.dia ?? '').localeCompare(b.dia ?? '') || a.created_at.localeCompare(b.created_at)
+
 // Resume los registros de un empleado por día del mes.
 // estado[dia][elemento] = true (Bien) | false (Mal) ; entrada[dia] / salida[dia] = nombre
 export function resumirMes(registros, nombre) {
   const estado = {}
   const entrada = {}
   const salida = {}
-  const ordenados = [...registros].sort((a, b) => a.created_at.localeCompare(b.created_at))
+  const ordenados = [...registros].sort(porDiaYHora)
   for (const r of ordenados) {
-    const d = new Date(r.created_at).getDate()
+    const d = diaDelMes(r)
     if (r.tipo === 'entrada') {
       entrada[d] ??= nombre
       const dia = (estado[d] ??= {})
@@ -50,7 +54,7 @@ export function construirHojaMensual({ registros, mes, nombre }) {
   const nombreFirma = nombre.toUpperCase()
   const { estado, entrada, salida } = resumirMes(registros, nombreFirma)
   // Moto: la del primer registro del mes de ese empleado
-  const primero = [...registros].sort((a, b) => a.created_at.localeCompare(b.created_at)).find((r) => r.matricula)
+  const primero = [...registros].sort(porDiaYHora).find((r) => r.matricula)
   const matricula = primero?.matricula ?? ''
 
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })

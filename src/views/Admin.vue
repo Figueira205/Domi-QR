@@ -5,6 +5,8 @@ import { supabase, configurado, ADMIN_EMAIL } from '../lib/supabase'
 import { generarHojaMensual } from '../lib/pdf'
 import AnadirRegistro from '../components/AnadirRegistro.vue'
 import Empleados from '../components/Empleados.vue'
+import EditarRegistro from '../components/EditarRegistro.vue'
+import { rangoMesDia, fechaCorta, horaLocal, esDiaSiguiente } from '../lib/dias'
 
 const sesion = ref(false)
 const password = ref('')
@@ -13,6 +15,9 @@ const cargando = ref(false)
 const error = ref('')
 const registros = ref([])
 const empleados = ref([])
+const seleccionado = ref(null) // id del registro con las opciones abiertas
+const editandoId = ref(null)
+const eliminando = ref(false)
 const vista = ref('registros')
 
 const hoy = new Date()
@@ -27,24 +32,18 @@ const pdfMes = ref(filtros.value.mes)
 const generando = ref(false)
 
 const labels = Object.fromEntries(ELEMENTOS.map((e) => [e.key, e.label]))
-const fmt = (iso) => new Date(iso).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' })
 const malos = (r) => Object.entries(r.checks || {}).filter(([, v]) => v === false).map(([k]) => labels[k] || k)
 
 
-function rangoMes(mes) {
-  const [a, m] = mes.split('-').map(Number)
-  return [new Date(a, m - 1, 1).toISOString(), new Date(a, m, 1).toISOString()]
-}
-
 async function consulta(extra = {}) {
   const f = { ...filtros.value, ...extra }
-  let q = supabase.from('registros').select('*').order('created_at', { ascending: false }).limit(2000)
+  let q = supabase.from('registros').select('*').order('dia', { ascending: false }).order('created_at', { ascending: false }).limit(2000)
   if (f.conductor) q = q.eq('empleado_id', f.conductor)
   if (f.matricula) q = q.ilike('matricula', `%${f.matricula.toUpperCase().trim()}%`)
   if (f.tipo) q = q.eq('tipo', f.tipo)
   if (f.mes) {
-    const [d, h] = rangoMes(f.mes)
-    q = q.gte('created_at', d).lt('created_at', h)
+    const [d, h] = rangoMesDia(f.mes)
+    q = q.gte('dia', d).lt('dia', h)
   }
   return q
 }
@@ -86,17 +85,43 @@ async function salir() {
   vista.value = 'registros'
 }
 
+function abrirOpciones(r) {
+  if (editandoId.value) return
+  seleccionado.value = seleccionado.value === r.id ? null : r.id
+}
+
+function cerrarEdicion(recargar) {
+  editandoId.value = null
+  seleccionado.value = null
+  if (recargar) cargar()
+}
+
+async function eliminar(r) {
+  const ok = window.confirm(
+    `¿Eliminar este registro de ${r.tipo} de ${r.conductor} (${fechaCorta(r.dia)})?\n\nSe borrará de forma permanente y no se podrá recuperar.`,
+  )
+  if (!ok) return
+  error.value = ''
+  eliminando.value = true
+  const { error: err } = await supabase.from('registros').delete().eq('id', r.id)
+  eliminando.value = false
+  if (err) { error.value = 'No se pudo eliminar el registro.'; return }
+  seleccionado.value = null
+  cargar()
+}
+
 async function descargarPdf() {
   error.value = ''
   if (!pdfEmpleado.value) { error.value = 'Elige un empleado.'; return }
   generando.value = true
-  const [d, h] = rangoMes(pdfMes.value)
+  const [d, h] = rangoMesDia(pdfMes.value)
   const { data, error: err } = await supabase
     .from('registros')
     .select('*')
     .eq('empleado_id', pdfEmpleado.value)
-    .gte('created_at', d)
-    .lt('created_at', h)
+    .gte('dia', d)
+    .lt('dia', h)
+    .order('dia')
     .order('created_at')
     .limit(5000)
   generando.value = false
@@ -191,20 +216,37 @@ onMounted(async () => {
     <p v-if="cargando">Cargando…</p>
     <p v-else>{{ registros.length }} registros</p>
 
-    <div v-for="r in registros" :key="r.id" class="card">
-      <div style="display:flex;justify-content:space-between;gap:.5rem;flex-wrap:wrap">
-        <strong>{{ r.conductor }} · {{ r.matricula }}</strong>
-        <span><span class="tag" :class="r.tipo">{{ r.tipo }}</span> {{ fmt(r.created_at) }}</span>
+    <template v-for="r in registros" :key="r.id">
+      <EditarRegistro
+        v-if="editandoId === r.id"
+        :registro="r"
+        :empleados="empleados"
+        @guardado="cerrarEdicion(true)"
+        @cancelar="cerrarEdicion(false)"
+      />
+      <div v-else class="card registro" :class="{ abierto: seleccionado === r.id }" @click="abrirOpciones(r)">
+        <div style="display:flex;justify-content:space-between;gap:.5rem;flex-wrap:wrap">
+          <strong>{{ r.conductor }} · {{ r.matricula }}</strong>
+          <span>
+            <span class="tag" :class="r.tipo">{{ r.tipo }}</span>
+            {{ fechaCorta(r.dia) }} · {{ horaLocal(r.created_at) }}<small v-if="esDiaSiguiente(r.created_at, r.dia)"> (madrugada siguiente)</small>
+          </span>
+        </div>
+        <p v-if="r.tipo === 'entrada'" style="margin:.5rem 0 0">
+          <span v-if="malos(r).length" class="mal">Mal: {{ malos(r).join(', ') }}</span>
+          <span v-else>Todo correcto</span>
+        </p>
+        <p v-if="r.incidencia" style="margin:.5rem 0 0">
+          <span :class="{ mal: r.afecta_seguridad }">{{ r.afecta_seguridad ? '⚠ Afecta a la seguridad: ' : 'Incidencia: ' }}</span>{{ r.incidencia }}
+          <span v-if="r.actuacion"><br /><em>Actuación: {{ r.actuacion }}</em></span>
+        </p>
+        <div v-if="seleccionado === r.id" class="grid2" style="margin-top:.8rem" @click.stop>
+          <button class="sec" @click="editandoId = r.id">✏️ Modificar</button>
+          <button class="sec" :disabled="eliminando" @click="eliminar(r)">🗑️ Eliminar</button>
+        </div>
+        <small v-else class="pista">Toca para modificar o eliminar</small>
       </div>
-      <p v-if="r.tipo === 'entrada'" style="margin:.5rem 0 0">
-        <span v-if="malos(r).length" class="mal">Mal: {{ malos(r).join(', ') }}</span>
-        <span v-else>Todo correcto</span>
-      </p>
-      <p v-if="r.incidencia" style="margin:.5rem 0 0">
-        <span :class="{ mal: r.afecta_seguridad }">{{ r.afecta_seguridad ? '⚠ Afecta a la seguridad: ' : 'Incidencia: ' }}</span>{{ r.incidencia }}
-        <span v-if="r.actuacion"><br /><em>Actuación: {{ r.actuacion }}</em></span>
-      </p>
-    </div>
+    </template>
     </template>
 
     <button class="sec full" style="margin-top:1rem" @click="salir">Cerrar sesión</button>

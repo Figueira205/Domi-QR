@@ -21,6 +21,7 @@
 - [Objetivo](#objetivo)
 - [Cómo funciona](#cómo-funciona)
 - [Funcionalidades](#funcionalidades)
+- [Reglas de funcionamiento](#reglas-de-funcionamiento)
 - [Capturas de pantalla](#capturas-de-pantalla)
 - [La hoja mensual en PDF](#la-hoja-mensual-en-pdf)
 - [Tecnologías](#tecnologías)
@@ -72,6 +73,7 @@ El administrador entra en `/#/admin` con su contraseña.
 - Selección de la **moto** entre las disponibles.
 - Checklist de 11 elementos con botones grandes **Bien / Mal**, pensado para usarse con una mano.
 - Si hay un elemento en mal estado, pide una descripción y avisa de que, si afecta a la seguridad, **no debe usarse la moto** hasta su revisión.
+- Si ya registró la entrada (o la salida) de ese día, la aplicación **avisa antes de guardar** y pregunta si quiere sustituirla por la nueva.
 
 **Para el administrador**
 - Acceso protegido con contraseña.
@@ -79,6 +81,16 @@ El administrador entra en `/#/admin` con su contraseña.
 - **Hoja mensual en PDF por empleado**, con el formato oficial de la empresa.
 - **Gestión de empleados**: crear, modificar y eliminar (nombre completo y PIN, sin PIN repetidos).
 - **Alta de registros pasados**, para días en que un empleado olvidó fichar.
+- **Modificar y eliminar cualquier registro**, sea quien sea quien lo creó: al tocar un registro aparecen las opciones *Modificar* y *Eliminar*. Antes de borrar se pide confirmación, porque el borrado es **permanente**.
+
+## Reglas de funcionamiento
+
+Pensadas para el día a día real de la tienda:
+
+- **Un registro de entrada y uno de salida por empleado y día.** No se pueden crear dos entradas, ni dos salidas, para el mismo día. Vale tanto para los empleados como para el administrador.
+- **Aviso antes de sustituir.** Si un empleado intenta registrar una entrada (o salida) cuando ya tiene una ese día, ve un mensaje como *«Ya registraste tu entrada de hoy (a las 09:02). ¿Quieres sustituirla por esta nueva entrada ahora mismo?»*. Si confirma, la anterior se sustituye por la nueva; si cancela, no cambia nada.
+- **Turnos de madrugada.** Como el reparto puede terminar pasada la medianoche, **las salidas registradas hasta la 1:30 de la madrugada (hora de Madrid) cuentan para el día anterior**. Así la salida queda en el mismo día de trabajo que su entrada, en el listado y en la hoja PDF. La hora real se conserva y el panel la marca como *«madrugada siguiente»*.
+- **El administrador tiene la última palabra.** Puede modificar o eliminar cualquier registro. Al modificarlo se aplican las mismas reglas: no puede dejar dos registros del mismo tipo en un día. Eliminar pide confirmación y no se puede deshacer.
 
 ## Capturas de pantalla
 
@@ -99,6 +111,12 @@ El administrador entra en `/#/admin` con su contraseña.
   </tr>
 </table>
 
+### Aviso al intentar registrar dos veces el mismo día
+
+<p align="center">
+  <img src="docs/img/08-duplicado.png" alt="Aviso: ya existe una entrada hoy, ¿quieres sustituirla?" width="300">
+</p>
+
 ### Panel de administración
 
 <table>
@@ -109,6 +127,17 @@ El administrador entra en `/#/admin` con su contraseña.
   <tr>
     <td><img src="docs/img/05-admin-registros.png" alt="Panel de administración con filtros y lista de registros" width="420"></td>
     <td><img src="docs/img/06-admin-empleados.png" alt="Gestión de empleados: crear, modificar y eliminar" width="420"></td>
+  </tr>
+</table>
+
+<table>
+  <tr>
+    <td align="center"><b>Al tocar un registro: Modificar / Eliminar</b></td>
+    <td align="center"><b>Modificar un registro</b></td>
+  </tr>
+  <tr>
+    <td valign="top"><img src="docs/img/09-admin-opciones.png" alt="Opciones Modificar y Eliminar sobre un registro" width="420"></td>
+    <td valign="top"><img src="docs/img/10-admin-editar.png" alt="Formulario para modificar un registro" width="420"></td>
   </tr>
 </table>
 
@@ -150,7 +179,7 @@ flowchart TB
     end
 
     subgraph Supabase["☁️ Supabase"]
-        R["Funciones RPC<br/>verificar_pin · registrar"]
+        R["Funciones RPC<br/>verificar_pin · registrar_turno"]
         AU["Auth (administrador)"]
         DB[("PostgreSQL + RLS<br/>empleados · registros")]
     end
@@ -162,7 +191,7 @@ flowchart TB
     A --> P
 ```
 
-Los empleados **no leen ni escriben directamente en las tablas**: solo pueden llamar a dos funciones, que comprueban el PIN en el servidor. El administrador se autentica con Supabase Auth y es el único con acceso a la lista de empleados.
+Los empleados **no leen ni escriben directamente en las tablas**: solo pueden llamar a dos funciones, que comprueban el PIN y aplican las reglas (un registro por día, turnos de madrugada) en el servidor. El administrador se autentica con Supabase Auth y es el único con acceso a la lista de empleados.
 
 ## Estructura del proyecto
 
@@ -178,11 +207,14 @@ Los empleados **no leen ni escriben directamente en las tablas**: solo pueden ll
 │   ├── lib/
 │   │   ├── config.js              # Motos y elementos del checklist
 │   │   ├── supabase.js            # Cliente de Supabase
+│   │   ├── dias.js                # Día de trabajo, fechas y comprobación de duplicados
 │   │   └── pdf.js                 # Generación de la hoja mensual
 │   ├── components/
 │   │   ├── PinGate.vue            # Pantalla de PIN
 │   │   ├── Empleados.vue          # Gestión de empleados
-│   │   └── AnadirRegistro.vue     # Alta de registros pasados
+│   │   ├── AnadirRegistro.vue     # Alta de registros pasados
+│   │   ├── EditarRegistro.vue     # Modificación de un registro
+│   │   └── ConfirmarReemplazo.vue # Aviso «ya existe, ¿sustituir?»
 │   └── views/
 │       ├── Inicio.vue
 │       ├── Entrada.vue
@@ -208,7 +240,8 @@ Los empleados **no leen ni escriben directamente en las tablas**: solo pueden ll
 | Columna | Tipo | Descripción |
 |---|---|---|
 | `id` | uuid | Identificador |
-| `created_at` | timestamptz | Fecha y hora del registro (automática) |
+| `created_at` | timestamptz | Fecha y hora reales del registro (automática) |
+| `dia` | date | **Día de trabajo** al que pertenece (las salidas hasta la 1:30 cuentan para el día anterior) |
 | `tipo` | text | `entrada` o `salida` |
 | `empleado_id` | uuid | Empleado que registra |
 | `conductor` | text | Nombre del empleado en el momento del registro |
@@ -217,6 +250,8 @@ Los empleados **no leen ni escriben directamente en las tablas**: solo pueden ll
 | `incidencia` | text | Descripción de la incidencia, si la hay |
 | `afecta_seguridad` | boolean | Si la incidencia afecta a la seguridad |
 | `actuacion` | text | Actuación realizada |
+
+Solo puede haber **un registro por empleado, tipo y día** (`empleado_id`, `tipo`, `dia`).
 
 El esquema completo, con políticas de seguridad y funciones, está en [`supabase/schema.sql`](supabase/schema.sql).
 
@@ -270,8 +305,8 @@ Los empleados y sus PIN se gestionan desde el propio panel de administración.
 
 ## Seguridad
 
-- Los empleados solo pueden **crear registros a través de funciones del servidor** que validan el PIN; no tienen acceso directo a las tablas y **no pueden leer la lista de empleados ni los PIN**.
-- La tabla `empleados` solo es accesible para el administrador autenticado.
+- Los empleados solo pueden **crear o sustituir su propio registro del día a través de funciones del servidor** que validan el PIN; no tienen acceso directo a las tablas y **no pueden leer la lista de empleados ni los PIN**.
+- La tabla `empleados` solo es accesible para el administrador autenticado, y solo él puede modificar o eliminar registros.
 - La clave que va en el navegador es la **clave pública** de Supabase; nunca se incluye la clave `service_role` ni contraseñas en el repositorio.
 
 Limitaciones conocidas, asumidas en esta primera versión:
@@ -289,3 +324,4 @@ Ideas para próximas versiones (no comprometidas):
 - [ ] Aviso por correo cuando se registre una incidencia que afecte a la seguridad.
 - [ ] Exportación de registros a CSV.
 - [ ] Matrícula asignada por defecto a cada empleado.
+- [ ] Historial de cambios de los registros modificados por el administrador.
