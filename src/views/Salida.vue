@@ -1,6 +1,6 @@
 <script setup>
 import { computed, ref } from 'vue'
-import { CONDUCTORES } from '../lib/config'
+import { CONDUCTORES, MOTOS } from '../lib/config'
 import { supabase, configurado } from '../lib/supabase'
 
 const conductor = ref('')
@@ -54,8 +54,11 @@ async function enviar() {
         <option value="" disabled>Selecciona tu nombre</option>
         <option v-for="c in CONDUCTORES" :key="c">{{ c }}</option>
       </select>
-      <label for="m">Matrícula del ciclomotor</label>
-      <input id="m" v-model="matricula" placeholder="1234 ABC" autocapitalize="characters" required />
+      <label for="m">Ciclomotor (matrícula)</label>
+      <select id="m" v-model="matricula" required>
+        <option value="" disabled>Selecciona la moto</option>
+        <option v-for="m in MOTOS" :key="m">{{ m }}</option>
+      </select>
     </div>
 
     <div class="card">

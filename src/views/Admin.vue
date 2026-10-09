@@ -1,8 +1,9 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import { CONDUCTORES, ELEMENTOS } from '../lib/config'
+import { CONDUCTORES, ELEMENTOS, MOTOS } from '../lib/config'
 import { supabase, configurado, ADMIN_EMAIL } from '../lib/supabase'
-import { generarPdfMensual } from '../lib/pdf'
+import { generarHojaMensual } from '../lib/pdf'
+import AnadirRegistro from '../components/AnadirRegistro.vue'
 
 const sesion = ref(false)
 const password = ref('')
@@ -18,12 +19,14 @@ const filtros = ref({
   tipo: '',
   mes: `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}`,
 })
+const pdfEmpleado = ref('')
+const pdfMes = ref(filtros.value.mes)
+const generando = ref(false)
 
 const labels = Object.fromEntries(ELEMENTOS.map((e) => [e.key, e.label]))
 const fmt = (iso) => new Date(iso).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' })
 const malos = (r) => Object.entries(r.checks || {}).filter(([, v]) => v === false).map(([k]) => labels[k] || k)
 
-const matriculaFiltro = computed(() => filtros.value.matricula.toUpperCase().replace(/\s+/g, ' ').trim())
 
 function rangoMes(mes) {
   const [a, m] = mes.split('-').map(Number)
@@ -68,17 +71,22 @@ async function salir() {
 }
 
 async function descargarPdf() {
-  if (!matriculaFiltro.value) { error.value = 'Escribe una matrícula completa para generar el PDF.'; return }
   error.value = ''
+  if (!pdfEmpleado.value) { error.value = 'Elige un empleado.'; return }
+  generando.value = true
+  const [d, h] = rangoMes(pdfMes.value)
   const { data, error: err } = await supabase
     .from('registros')
     .select('*')
-    .eq('matricula', matriculaFiltro.value)
-    .gte('created_at', rangoMes(filtros.value.mes)[0])
-    .lt('created_at', rangoMes(filtros.value.mes)[1])
+    .eq('conductor', pdfEmpleado.value)
+    .gte('created_at', d)
+    .lt('created_at', h)
     .order('created_at')
-  if (err) { error.value = 'No se pudieron cargar los datos del PDF.'; return }
-  generarPdfMensual({ registros: data, matricula: matriculaFiltro.value, mes: filtros.value.mes })
+    .limit(5000)
+  generando.value = false
+  if (err) { error.value = 'No se pudieron cargar los datos de la hoja.'; return }
+  if (!data.length) { error.value = 'Ese empleado no tiene registros en ese mes.'; return }
+  generarHojaMensual({ registros: data, mes: pdfMes.value, conductor: pdfEmpleado.value })
 }
 
 onMounted(async () => {
@@ -119,21 +127,41 @@ onMounted(async () => {
           </select>
         </div>
         <div>
-          <label>Matrícula</label>
-          <input v-model="filtros.matricula" placeholder="1234 ABC" @change="cargar" />
+          <label>Moto</label>
+          <select v-model="filtros.matricula" @change="cargar">
+            <option value="">Todas</option>
+            <option v-for="m in MOTOS" :key="m">{{ m }}</option>
+          </select>
         </div>
         <div>
           <label>Mes</label>
           <input v-model="filtros.mes" type="month" @change="cargar" />
         </div>
       </div>
-      <div class="grid2" style="margin-top:.8rem">
-        <button class="sec" @click="cargar">Actualizar</button>
-        <button @click="descargarPdf">Descargar PDF del mes</button>
-      </div>
-      <p v-if="error" class="error">{{ error }}</p>
-      <small>El PDF se genera para la matrícula y el mes seleccionados (formato del checklist en papel).</small>
+      <button class="sec full" style="margin-top:.8rem" @click="cargar">Actualizar</button>
     </div>
+
+    <div class="card">
+      <h2>Hoja del mes (PDF)</h2>
+      <div class="grid2">
+        <div>
+          <label>Empleado</label>
+          <select v-model="pdfEmpleado">
+            <option value="" disabled>Selecciona</option>
+            <option v-for="c in CONDUCTORES" :key="c">{{ c }}</option>
+          </select>
+        </div>
+        <div>
+          <label>Mes</label>
+          <input v-model="pdfMes" type="month" />
+        </div>
+      </div>
+      <p style="margin:.6rem 0"><small>Genera la hoja de revisión diaria de ese empleado, con las entradas y salidas registradas hasta hoy.</small></p>
+      <button class="full" :disabled="generando" @click="descargarPdf">{{ generando ? 'Generando…' : 'Generar hoja del mes' }}</button>
+      <p v-if="error" class="error">{{ error }}</p>
+    </div>
+
+    <AnadirRegistro @guardado="cargar" />
 
     <p v-if="cargando">Cargando…</p>
     <p v-else>{{ registros.length }} registros</p>

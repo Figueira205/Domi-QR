@@ -1,112 +1,160 @@
 import { jsPDF } from 'jspdf'
-import autoTable from 'jspdf-autotable'
-import { ELEMENTOS, EMPRESA } from './config'
+import { ELEMENTOS } from './config.js'
 
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
+const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1)
 
-const fmt = (iso) => new Date(iso).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' })
+// Resume los registros de un empleado por día del mes.
+// estado[dia][elemento] = true (Bien) | false (Mal) ; entrada[dia] / salida[dia] = nombre
+export function resumirMes(registros) {
+  const estado = {}
+  const entrada = {}
+  const salida = {}
+  const ordenados = [...registros].sort((a, b) => a.created_at.localeCompare(b.created_at))
+  for (const r of ordenados) {
+    const d = new Date(r.created_at).getDate()
+    if (r.tipo === 'entrada') {
+      entrada[d] ??= r.conductor
+      const dia = (estado[d] ??= {})
+      for (const e of ELEMENTOS) {
+        const v = r.checks?.[e.key]
+        if (v === false) dia[e.key] = false
+        else if (v === true && dia[e.key] !== false) dia[e.key] = true
+      }
+    } else if (r.tipo === 'salida') {
+      salida[d] = r.conductor // la última salida del día
+    }
+  }
+  return { estado, entrada, salida }
+}
 
-// Genera el checklist mensual de una moto con el formato del papel:
-// una hoja por quincena (1-15 y 16-fin), columnas ✓ / X por día, más el listado de incidencias.
-// `registros` = entradas y salidas de esa matrícula en ese mes. `mes` = 'YYYY-MM'.
-export function generarPdfMensual({ registros, matricula, mes }) {
+function tick(doc, cx, cy, s) {
+  doc.lines([[s * 0.35, s * 0.4], [s * 0.65, -s * 1.0]], cx - s * 0.5, cy + s * 0.05)
+}
+function cruz(doc, cx, cy, s) {
+  doc.line(cx - s * 0.45, cy - s * 0.45, cx + s * 0.45, cy + s * 0.45)
+  doc.line(cx - s * 0.45, cy + s * 0.45, cx + s * 0.45, cy - s * 0.45)
+}
+
+// Texto girado 90º en sentido horario (se lee de arriba abajo), centrado en el ancho `w` de la celda.
+function textoVertical(doc, texto, xCelda, w, yInicio, size) {
+  doc.setFontSize(size)
+  const alto = size * 0.3528 * 0.72
+  doc.text(texto, xCelda + w / 2 - alto / 2, yInicio, { angle: -90 })
+}
+
+// Hoja mensual de un empleado (A4 vertical), formato del checklist de revisión diaria.
+export function construirHojaMensual({ registros, mes, conductor }) {
   const [anio, m] = mes.split('-').map(Number)
   const diasMes = new Date(anio, m, 0).getDate()
-  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
-  const entradas = registros.filter((r) => r.tipo === 'entrada')
+  const { estado, entrada, salida } = resumirMes(registros)
 
-  // Último registro de entrada de cada día
-  const porDia = {}
-  for (const r of [...entradas].sort((a, b) => a.created_at.localeCompare(b.created_at))) {
-    porDia[new Date(r.created_at).getDate()] = r
-  }
-
-  const quincenas = [[1, Math.min(15, diasMes)]]
-  if (diasMes > 15) quincenas.push([16, diasMes])
-
-  quincenas.forEach(([desde, hasta], idx) => {
-    if (idx > 0) doc.addPage()
-    cabecera(doc, matricula, `${MESES[m - 1]} ${anio}`, 'CHECKLIST DE REVISIÓN DIARIA')
-
-    const dias = []
-    for (let d = desde; d <= hasta; d++) dias.push(d)
-    const head = [
-      [{ content: 'Elemento', rowSpan: 2 }, ...dias.map((d) => ({ content: String(d), colSpan: 2 }))],
-      dias.flatMap(() => ['✓', 'X']),
-    ]
-    // jsPDF (Helvetica) no dibuja ✓: usamos "OK" en la columna ✓ y "X" en la columna X
-    head[1] = dias.flatMap(() => ['OK', 'X'])
-    const body = ELEMENTOS.map((e) => [
-      e.label,
-      ...dias.flatMap((d) => {
-        const v = porDia[d]?.checks?.[e.key]
-        return [v === true ? 'OK' : '', v === false ? 'X' : '']
-      }),
-    ])
-    autoTable(doc, {
-      startY: 32,
-      head,
-      body,
-      theme: 'grid',
-      margin: { left: 8, right: 8 },
-      styles: { fontSize: 7, cellPadding: 1.2, halign: 'center', lineColor: [60, 60, 60], lineWidth: 0.2, textColor: 20 },
-      headStyles: { fillColor: [235, 235, 235], textColor: 20, fontStyle: 'bold' },
-      columnStyles: { 0: { halign: 'left', cellWidth: 38, fontStyle: 'bold' } },
-      didParseCell: (data) => {
-        if (data.section === 'body' && data.cell.raw === 'X') data.cell.styles.textColor = [200, 16, 46]
-      },
-    })
-    pie(doc, doc.lastAutoTable.finalY + 10)
-  })
-
-  // Listado de incidencias del mes (entrada y salida)
-  const incidencias = registros.filter((r) => r.incidencia)
-  doc.addPage()
-  cabecera(doc, matricula, `${MESES[m - 1]} ${anio}`, 'REGISTRO DE INCIDENCIAS')
-  if (incidencias.length === 0) {
-    doc.setFontSize(10)
-    doc.text('Sin incidencias registradas en este periodo.', 10, 36)
-  } else {
-    autoTable(doc, {
-      startY: 32,
-      head: [['Fecha', 'Momento', 'Incidencia detectada', 'Afecta a la seguridad', 'Actuación realizada', 'Responsable']],
-      body: incidencias.map((r) => [
-        fmt(r.created_at),
-        r.tipo === 'entrada' ? 'Entrada' : 'Salida',
-        r.incidencia,
-        r.afecta_seguridad ? 'SÍ' : 'No',
-        r.actuacion || '',
-        r.conductor,
-      ]),
-      theme: 'grid',
-      margin: { left: 8, right: 8 },
-      styles: { fontSize: 8, cellPadding: 1.8, textColor: 20 },
-      headStyles: { fillColor: [235, 235, 235], textColor: 20 },
-    })
-  }
-
-  doc.save(`checklist_${matricula.replace(/\s+/g, '')}_${mes}.pdf`)
-}
-
-function cabecera(doc, matricula, mesTxt, titulo) {
-  doc.setFont('helvetica', 'normal')
-  doc.setFontSize(9)
-  doc.setTextColor(120)
-  doc.text(EMPRESA, doc.internal.pageSize.getWidth() / 2, 10, { align: 'center' })
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
   doc.setTextColor(20)
-  doc.setFont('helvetica', 'bold')
-  doc.setFontSize(13)
-  doc.text(titulo, 8, 20)
-  doc.setFontSize(10)
-  doc.text(`Mes: ${mesTxt}`, 8, 27)
-  doc.text(`Ciclomotor: ${matricula}`, 80, 27)
+  doc.setDrawColor(20)
+
+  // Geometría
+  const x0 = 9
+  const y0 = 18.6
+  const hHead = 51.6
+  const rowH = 6.52
+  const colW = 6.13
+  const nCols = 12 // 11 elementos + columna "Elemento:"
+  const wDia = 7.0
+  const xDia = x0 + nCols * colW
+  const xFin = xDia + wDia
+  const yBody = y0 + hHead
+  const yFin = yBody + 31 * rowH
+
+  // Cuadrícula fina
+  doc.setLineWidth(0.25)
+  for (let i = 1; i <= nCols; i++) doc.line(x0 + i * colW, y0, x0 + i * colW, yFin)
+  for (let r = 1; r <= 31; r++) doc.line(x0, yBody + r * rowH, xFin, yBody + r * rowH)
+  // Contorno y separación de cabecera, más gruesos
+  doc.setLineWidth(0.7)
+  doc.rect(x0, y0, xFin - x0, yFin - y0)
+  doc.line(x0, yBody, xFin, yBody)
+
+  // Cabecera: de izquierda a derecha, Estado general … Neumáticos, Elemento:, Mes
+  doc.setFont('helvetica', 'normal')
+  const nombres = [...ELEMENTOS].reverse().map((e) => e.etiquetaHoja ?? e.label)
+  nombres.forEach((n, i) => textoVertical(doc, n, x0 + i * colW, colW, y0 + 1.5, 9.5))
+  textoVertical(doc, 'Elemento:', x0 + 11 * colW, colW, y0 + 1.5, 9.5)
+  textoVertical(doc, `Mes: ${cap(MESES[m - 1])} ${anio}`, xDia, wDia, y0 + 1.5, 9.5)
+
+  // Números de día (también girados) y marcas ✓ / X
+  for (let d = 1; d <= 31; d++) {
+    const cy = yBody + (d - 0.5) * rowH
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(9.5)
+    const t = String(d)
+    doc.text(t, xDia + wDia / 2 - 1.2, cy - doc.getTextWidth(t) / 2, { angle: -90 })
+    if (d > diasMes) continue
+    ELEMENTOS.forEach((e, k) => {
+      const v = estado[d]?.[e.key]
+      if (v === undefined) return
+      const col = 10 - k // columnas en orden inverso
+      const cx = x0 + (col + 0.5) * colW
+      doc.setLineWidth(0.5)
+      doc.setDrawColor(20)
+      if (v === true) tick(doc, cx, cy, 3.0)
+      else cruz(doc, cx, cy, 3.0)
+    })
+  }
+
+  // Bloques de firma (a la derecha): nombre del empleado cuando fichó la entrada / la salida
+  const bloques = [
+    { x: 91.3, w: 49, titulo: 'FIRMA 1: • Al inicio de turno', nombres: entrada },
+    { x: 146, w: 49.6, titulo: 'FIRMA 2: • Al final del turno', nombres: salida },
+  ]
+  for (const b of bloques) {
+    doc.setLineWidth(0.5)
+    doc.setDrawColor(20)
+    doc.line(b.x, y0 - 0.8, b.x, yBody)
+    doc.line(b.x, yBody, b.x + b.w, yBody)
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(9.5)
+    doc.text(b.titulo, b.x + 1.5, 44.5)
+    doc.setLineWidth(0.25)
+    doc.setDrawColor(70)
+    for (let d = 1; d <= 31; d++) {
+      const y = yBody + d * rowH
+      doc.line(b.x + 1, y, b.x + b.w, y)
+      const nombre = d <= diasMes ? b.nombres[d] : null
+      if (nombre) {
+        doc.setFontSize(9.5)
+        doc.text(nombre, b.x + 3, y - 1.6)
+      }
+    }
+    doc.setDrawColor(20)
+  }
+
+  // Título girado en el borde derecho
+  doc.setFont('helvetica', 'normal')
+  let size = 12
+  doc.setFontSize(size)
+  const titulo = 'CHECKLIST DE REVISIÓN DIARIA'
+  size = (size * 58.8) / doc.getTextWidth(titulo)
+  doc.setFontSize(size)
+  doc.text(titulo, 202.5, 145 - 29.4, { angle: -90 })
+
+  // Leyenda: ✓ Bien / X Mal
+  doc.setFillColor(20, 20, 20)
+  doc.rect(46, 277, 13, 7.4, 'F')
+  doc.setDrawColor(255)
+  doc.setLineWidth(0.5)
+  tick(doc, 56.2, 280.7, 3.2)
+  cruz(doc, 49.6, 280.7, 3.0)
+  doc.setDrawColor(20)
+  doc.setFontSize(9.5)
+  doc.setTextColor(20)
+  doc.text('Bien', 55.2, 286, { angle: -90 })
+  doc.text('Mal', 48.6, 286, { angle: -90 })
+
+  return doc
 }
 
-function pie(doc, y) {
-  doc.setFont('helvetica', 'normal')
-  doc.setFontSize(9)
-  doc.text('Fecha: ____________________   Ciclomotor: ____________________', 8, y)
-  doc.text('Conductor: ____________________   Firma: ____________________', 8, y + 8)
-  doc.setFontSize(8)
-  doc.text('Nota: Cualquier incidencia que pueda comprometer el manejo o la seguridad deberá comunicarse al encargado de turno antes de utilizar el ciclomotor.', 8, y + 16)
+export function generarHojaMensual(opts) {
+  const doc = construirHojaMensual(opts)
+  doc.save(`checklist_${opts.conductor.replace(/\s+/g, '_')}_${opts.mes}.pdf`)
 }
