@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import { MOTOS } from '../lib/config'
 import PinGate from '../components/PinGate.vue'
+import ConfirmarReemplazo from '../components/ConfirmarReemplazo.vue'
 import { supabase, configurado } from '../lib/supabase'
 
 const empleado = ref(null)
@@ -14,6 +15,7 @@ const actuacion = ref('')
 const enviando = ref(false)
 const error = ref('')
 const enviado = ref(false)
+const duplicado = ref(null) // { hora } si ya existe un registro de este tipo en el día
 
 const matriculaLimpia = computed(() => matricula.value.toUpperCase().replace(/\s+/g, ' ').trim())
 const valido = computed(
@@ -34,11 +36,11 @@ function cambiarEmpleado() {
   pin.value = ''
 }
 
-async function enviar() {
+async function enviar(reemplazar = false) {
   error.value = ''
   if (!configurado) { error.value = 'La base de datos no está configurada.'; return }
   enviando.value = true
-  const { error: err } = await supabase.rpc('registrar', {
+  const { error: err } = await supabase.rpc('registrar_turno', {
     p_pin: pin.value,
     p_empleado: empleado.value.id,
     p_tipo: 'salida',
@@ -47,12 +49,17 @@ async function enviar() {
     p_incidencia: hayIncidencia.value ? incidencia.value.trim() : null,
     p_afecta: hayIncidencia.value ? afecta.value : false,
     p_actuacion: hayIncidencia.value ? actuacion.value.trim() : null,
+    p_reemplazar: reemplazar === true,
   })
   enviando.value = false
   if (err) {
+    if (err.code === 'YA001') { duplicado.value = { hora: err.details || '' }; return }
     if (err.code === '28000') { error.value = 'Tu PIN ya no es válido. Vuelve a identificarte.'; cambiarEmpleado() }
     else error.value = 'No se pudo enviar. Inténtalo de nuevo.'
-  } else enviado.value = true
+  } else {
+    duplicado.value = null
+    enviado.value = true
+  }
 }
 </script>
 
@@ -65,7 +72,7 @@ async function enviar() {
 
   <PinGate v-else-if="!empleado" @listo="identificado" />
 
-  <form v-else @submit.prevent="enviar">
+  <form v-else @submit.prevent="enviar()">
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem">
         <div>
@@ -105,6 +112,14 @@ async function enviar() {
     </div>
 
     <p v-if="error" class="error">{{ error }}</p>
-    <button class="full" :disabled="!valido || enviando">{{ enviando ? 'Enviando…' : 'Registrar salida' }}</button>
+    <ConfirmarReemplazo
+      v-if="duplicado"
+      tipo="salida"
+      :hora="duplicado.hora"
+      :enviando="enviando"
+      @confirmar="enviar(true)"
+      @cancelar="duplicado = null"
+    />
+    <button v-else class="full" :disabled="!valido || enviando">{{ enviando ? 'Enviando…' : 'Registrar salida' }}</button>
   </form>
 </template>

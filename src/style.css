@@ -29,3 +29,6 @@ th, td { border-bottom:1px solid var(--borde); padding:.45rem .4rem; text-align:
 .tag { display:inline-block; padding:.1rem .5rem; border-radius:999px; font-size:.75rem; font-weight:700; background:#e7e7ec; }
 .tag.entrada { background:#e1f0ff; color:#0b4a8a; } .tag.salida { background:#fff0d9; color:#8a5200; }
 .mal { color:var(--mal); font-weight:700; }
+.registro { cursor: pointer; }
+.registro.abierto { border-color: var(--rojo); }
+.pista { display: block; margin-top: .4rem; color: #8a8a90; }

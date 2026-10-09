@@ -20,6 +20,7 @@ create table if not exists public.empleados (
 create table if not exists public.registros (
   id uuid primary key default gen_random_uuid(),
   created_at timestamptz not null default now(),
+  dia date not null,                  -- día de trabajo (las salidas hasta la 1:30 cuentan para el día anterior)
   tipo text not null check (tipo in ('entrada', 'salida')),
   empleado_id uuid references public.empleados (id) on delete set null,
   conductor text not null check (char_length(conductor) between 1 and 80), -- nombre en el momento del registro
@@ -34,6 +35,11 @@ create index if not exists registros_created_idx on public.registros (created_at
 create index if not exists registros_matricula_idx on public.registros (matricula);
 create index if not exists registros_empleado_idx on public.registros (empleado_id, created_at);
 
+-- Un registro de entrada y uno de salida por empleado y día
+create unique index if not exists registros_unico_por_dia
+  on public.registros (empleado_id, tipo, dia)
+  where empleado_id is not null;
+
 -- ---------------------------------------------------------------------
 --  Seguridad a nivel de fila (RLS)
 -- ---------------------------------------------------------------------
@@ -47,7 +53,7 @@ create policy "admin gestiona empleados" on public.empleados
   using ((select auth.jwt() ->> 'email') = 'admin@ejemplo.com')
   with check ((select auth.jwt() ->> 'email') = 'admin@ejemplo.com');
 
--- Registros: los empleados NO acceden a la tabla; registran mediante registrar().
+-- Registros: los empleados NO acceden a la tabla; registran mediante registrar_turno().
 -- El administrador puede añadir registros pasados desde el panel.
 drop policy if exists "insertar registros" on public.registros;
 create policy "insertar registros" on public.registros
@@ -61,6 +67,12 @@ create policy "admin lee" on public.registros
 drop policy if exists "admin borra" on public.registros;
 create policy "admin borra" on public.registros
   for delete to authenticated using (true);
+
+drop policy if exists "admin modifica" on public.registros;
+create policy "admin modifica" on public.registros
+  for update to authenticated
+  using ((select auth.jwt() ->> 'email') = 'admin@ejemplo.com')
+  with check ((select auth.jwt() ->> 'email') = 'admin@ejemplo.com');
 
 -- ---------------------------------------------------------------------
 --  Funciones para los empleados (se ejecutan con permisos del servidor)
@@ -76,10 +88,15 @@ as $$
   select e.id, e.nombre from public.empleados e where e.pin = p_pin order by e.nombre;
 $$;
 
--- Registra una entrada o salida validando el PIN del empleado.
-create or replace function public.registrar(
+-- Registra la entrada o salida del día validando el PIN del empleado.
+--  · Un registro por empleado, tipo y día de trabajo.
+--  · Las salidas hasta la 1:30 (hora de Madrid) cuentan para el día anterior.
+--  · Si ya existe, lanza el error YA001 (con la hora del existente en `detail`);
+--    con p_reemplazar = true, sustituye el registro existente por el nuevo.
+create or replace function public.registrar_turno(
   p_pin text, p_empleado uuid, p_tipo text, p_matricula text,
-  p_checks jsonb, p_incidencia text, p_afecta boolean, p_actuacion text
+  p_checks jsonb, p_incidencia text, p_afecta boolean, p_actuacion text,
+  p_reemplazar boolean default false
 )
 returns void
 language plpgsql
@@ -88,22 +105,58 @@ set search_path = public
 as $$
 declare
   v_nombre text;
+  v_local timestamp := timezone('Europe/Madrid', now());
+  v_dia date;
+  v_id uuid;
+  v_hora timestamptz;
 begin
   select nombre into v_nombre from public.empleados where id = p_empleado and pin = p_pin;
   if v_nombre is null then
     raise exception 'PIN incorrecto' using errcode = '28000';
   end if;
-  insert into public.registros (tipo, conductor, empleado_id, matricula, checks, incidencia, afecta_seguridad, actuacion)
-  values (p_tipo, v_nombre, p_empleado, upper(trim(p_matricula)), p_checks,
-          nullif(trim(coalesce(p_incidencia, '')), ''), coalesce(p_afecta, false),
-          nullif(trim(coalesce(p_actuacion, '')), ''));
+  if p_tipo not in ('entrada', 'salida') then
+    raise exception 'Tipo no válido' using errcode = '22023';
+  end if;
+
+  -- Día de trabajo
+  v_dia := v_local::date;
+  if p_tipo = 'salida' and v_local::time < time '01:31' then
+    v_dia := v_dia - 1;
+  end if;
+
+  select id, created_at into v_id, v_hora
+  from public.registros
+  where empleado_id = p_empleado and tipo = p_tipo and dia = v_dia
+  order by created_at desc
+  limit 1;
+
+  if v_id is not null then
+    if not p_reemplazar then
+      raise exception 'YA_EXISTE' using errcode = 'YA001',
+        detail = to_char(timezone('Europe/Madrid', v_hora), 'HH24:MI');
+    end if;
+    update public.registros
+    set conductor = v_nombre,
+        matricula = upper(trim(p_matricula)),
+        checks = p_checks,
+        incidencia = nullif(trim(coalesce(p_incidencia, '')), ''),
+        afecta_seguridad = coalesce(p_afecta, false),
+        actuacion = nullif(trim(coalesce(p_actuacion, '')), ''),
+        created_at = now()
+    where id = v_id;
+  else
+    insert into public.registros (tipo, conductor, empleado_id, matricula, checks, incidencia, afecta_seguridad, actuacion, dia)
+    values (p_tipo, v_nombre, p_empleado, upper(trim(p_matricula)), p_checks,
+            nullif(trim(coalesce(p_incidencia, '')), ''), coalesce(p_afecta, false),
+            nullif(trim(coalesce(p_actuacion, '')), ''), v_dia);
+  end if;
 end;
 $$;
 
 revoke all on function public.verificar_pin(text) from public;
-revoke all on function public.registrar(text, uuid, text, text, jsonb, text, boolean, text) from public;
+revoke all on function public.registrar_turno(text, uuid, text, text, jsonb, text, boolean, text, boolean) from public;
 grant execute on function public.verificar_pin(text) to anon, authenticated;
-grant execute on function public.registrar(text, uuid, text, text, jsonb, text, boolean, text) to anon, authenticated;
+grant execute on function public.registrar_turno(text, uuid, text, text, jsonb, text, boolean, text, boolean) to anon, authenticated;
 
 -- ---------------------------------------------------------------------
 --  Datos de ejemplo (opcional, descomenta y cambia los PIN)

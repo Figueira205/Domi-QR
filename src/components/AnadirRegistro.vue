@@ -2,6 +2,7 @@
 import { computed, reactive, ref } from 'vue'
 import { ELEMENTOS, MOTOS } from '../lib/config'
 import { supabase } from '../lib/supabase'
+import { instanteDeDia, registroExistente, fechaCorta } from '../lib/dias'
 
 const props = defineProps({ empleados: { type: Array, required: true } })
 const emit = defineEmits(['guardado'])
@@ -30,15 +31,25 @@ async function guardar() {
   error.value = ''
   ok.value = ''
   guardando.value = true
-  const [a, m, d] = fecha.value.split('-').map(Number)
-  const hora = tipo.value === 'entrada' ? 9 : 17
   const emp = props.empleados.find((e) => e.id === empleadoId.value)
+  try {
+    if (await registroExistente({ empleadoId: emp.id, tipo: tipo.value, dia: fecha.value })) {
+      error.value = `${emp.nombre} ya tiene una ${tipo.value} el ${fechaCorta(fecha.value)}. Modifica ese registro desde la lista en vez de crear otro.`
+      guardando.value = false
+      return
+    }
+  } catch {
+    error.value = 'No se pudo comprobar si ya existe un registro ese día.'
+    guardando.value = false
+    return
+  }
   const fila = {
     tipo: tipo.value,
     conductor: emp.nombre,
     empleado_id: emp.id,
     matricula: matriculaLimpia.value,
-    created_at: new Date(a, m - 1, d, hora, 0).toISOString(),
+    dia: fecha.value,
+    created_at: instanteDeDia(fecha.value, tipo.value),
     checks: tipo.value === 'entrada' ? { ...checks } : null,
     incidencia: incidencia.value.trim() || null,
     afecta_seguridad: incidencia.value.trim() ? afecta.value : false,
@@ -46,7 +57,7 @@ async function guardar() {
   const { error: err } = await supabase.from('registros').insert(fila)
   guardando.value = false
   if (err) { error.value = 'No se pudo guardar el registro.'; return }
-  ok.value = `Registro de ${tipo.value} añadido (${emp.nombre}, ${fecha.value}).`
+  ok.value = `Registro de ${tipo.value} añadido (${emp.nombre}, ${fechaCorta(fecha.value)}).`
   incidencia.value = ''
   afecta.value = false
   ELEMENTOS.forEach((e) => (checks[e.key] = true))

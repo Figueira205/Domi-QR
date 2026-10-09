@@ -3,6 +3,18 @@
 Todos los cambios relevantes del proyecto se documentan en este archivo.
 El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 
+## [1.1.0] - 2026-10-09
+
+### Añadido
+- El administrador puede **modificar y eliminar cualquier registro** desde el panel (al tocar un registro). El borrado pide confirmación y es permanente.
+- **Un registro de entrada y uno de salida por empleado y día**, tanto para empleados como para el administrador.
+- **Aviso antes de sustituir:** si ya existe la entrada o la salida de ese día, se pregunta si se quiere sustituir por la nueva.
+- **Turnos de madrugada:** las salidas hasta la 1:30 (hora de Madrid) cuentan para el día anterior. La hora real se conserva y se indica en el panel.
+- Columna `dia` (día de trabajo) en los registros; el panel y la hoja PDF la usan para filtrar y colocar cada registro.
+
+### Cambiado
+- La función de registro de los empleados pasa a llamarse `registrar_turno` e incluye las reglas anteriores.
+
 ## [1.0.0] - 2026-10-09
 
 ### Añadido
