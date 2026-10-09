@@ -2,7 +2,8 @@
 import { computed, onMounted, ref } from 'vue'
 import { CONDUCTORES, ELEMENTOS } from '../lib/config'
 import { supabase, configurado, ADMIN_EMAIL } from '../lib/supabase'
-import { generarInformeQuincenal, rangoQuincena } from '../lib/pdf'
+import { generarHojaMensual } from '../lib/pdf'
+import AnadirRegistro from '../components/AnadirRegistro.vue'
 
 const sesion = ref(false)
 const password = ref('')
@@ -18,14 +19,14 @@ const filtros = ref({
   tipo: '',
   mes: `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}`,
 })
-const quincena = ref(hoy.getDate() <= 15 ? 1 : 2)
+const pdfEmpleado = ref('')
+const pdfMes = ref(filtros.value.mes)
 const generando = ref(false)
 
 const labels = Object.fromEntries(ELEMENTOS.map((e) => [e.key, e.label]))
 const fmt = (iso) => new Date(iso).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' })
 const malos = (r) => Object.entries(r.checks || {}).filter(([, v]) => v === false).map(([k]) => labels[k] || k)
 
-const matriculaFiltro = computed(() => filtros.value.matricula.toUpperCase().replace(/\s+/g, ' ').trim())
 
 function rangoMes(mes) {
   const [a, m] = mes.split('-').map(Number)
@@ -71,23 +72,21 @@ async function salir() {
 
 async function descargarPdf() {
   error.value = ''
+  if (!pdfEmpleado.value) { error.value = 'Elige un empleado.'; return }
   generando.value = true
-  const [a, m] = filtros.value.mes.split('-').map(Number)
-  const [d1, d2] = rangoQuincena(filtros.value.mes, quincena.value)
-  let q = supabase
+  const [d, h] = rangoMes(pdfMes.value)
+  const { data, error: err } = await supabase
     .from('registros')
     .select('*')
-    .eq('tipo', 'entrada')
-    .gte('created_at', new Date(a, m - 1, d1).toISOString())
-    .lt('created_at', new Date(a, m - 1, d2 + 1).toISOString())
+    .eq('conductor', pdfEmpleado.value)
+    .gte('created_at', d)
+    .lt('created_at', h)
     .order('created_at')
     .limit(5000)
-  if (matriculaFiltro.value) q = q.eq('matricula', matriculaFiltro.value)
-  const { data, error: err } = await q
   generando.value = false
-  if (err) { error.value = 'No se pudieron cargar los datos del informe.'; return }
-  const ok = generarInformeQuincenal({ registros: data, mes: filtros.value.mes, quincena: quincena.value })
-  if (!ok) error.value = 'No hay registros de entrada en esa quincena.'
+  if (err) { error.value = 'No se pudieron cargar los datos de la hoja.'; return }
+  if (!data.length) { error.value = 'Ese empleado no tiene registros en ese mes.'; return }
+  generarHojaMensual({ registros: data, mes: pdfMes.value, conductor: pdfEmpleado.value })
 }
 
 onMounted(async () => {
@@ -140,16 +139,26 @@ onMounted(async () => {
     </div>
 
     <div class="card">
-      <h2>Informe quincenal (formato oficial)</h2>
-      <label>Quincena del mes seleccionado</label>
-      <select v-model.number="quincena">
-        <option :value="1">1ª quincena (días 1 al 15)</option>
-        <option :value="2">2ª quincena (día 16 al fin de mes)</option>
-      </select>
-      <p style="margin:.6rem 0"><small>Usa el mes y la matrícula de los filtros. Si dejas la matrícula vacía, se genera una hoja por cada ciclomotor con registros.</small></p>
-      <button class="full" :disabled="generando" @click="descargarPdf">{{ generando ? 'Generando…' : 'Generar informe quincenal' }}</button>
+      <h2>Hoja del mes (PDF)</h2>
+      <div class="grid2">
+        <div>
+          <label>Empleado</label>
+          <select v-model="pdfEmpleado">
+            <option value="" disabled>Selecciona</option>
+            <option v-for="c in CONDUCTORES" :key="c">{{ c }}</option>
+          </select>
+        </div>
+        <div>
+          <label>Mes</label>
+          <input v-model="pdfMes" type="month" />
+        </div>
+      </div>
+      <p style="margin:.6rem 0"><small>Genera la hoja de revisión diaria de ese empleado, con las entradas y salidas registradas hasta hoy.</small></p>
+      <button class="full" :disabled="generando" @click="descargarPdf">{{ generando ? 'Generando…' : 'Generar hoja del mes' }}</button>
       <p v-if="error" class="error">{{ error }}</p>
     </div>
+
+    <AnadirRegistro @guardado="cargar" />
 
     <p v-if="cargando">Cargando…</p>
     <p v-else>{{ registros.length }} registros</p>
