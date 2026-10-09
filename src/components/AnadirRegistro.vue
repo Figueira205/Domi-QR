@@ -1,6 +1,6 @@
 <script setup>
 import { computed, reactive, ref } from 'vue'
-import { CONDUCTORES, ELEMENTOS } from '../lib/config'
+import { CONDUCTORES, ELEMENTOS, MOTOS } from '../lib/config'
 import { supabase } from '../lib/supabase'
 
 const emit = defineEmits(['guardado'])
@@ -76,8 +76,11 @@ async function guardar() {
           </select>
         </div>
         <div>
-          <label>Matrícula</label>
-          <input v-model="matricula" placeholder="1234 ABC" required />
+          <label>Ciclomotor</label>
+          <select v-model="matricula" required>
+            <option value="" disabled>Selecciona</option>
+            <option v-for="m in MOTOS" :key="m">{{ m }}</option>
+          </select>
         </div>
       </div>
 

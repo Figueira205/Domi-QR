@@ -1,6 +1,6 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import { CONDUCTORES, ELEMENTOS } from '../lib/config'
+import { CONDUCTORES, ELEMENTOS, MOTOS } from '../lib/config'
 import { supabase, configurado, ADMIN_EMAIL } from '../lib/supabase'
 import { generarHojaMensual } from '../lib/pdf'
 import AnadirRegistro from '../components/AnadirRegistro.vue'
@@ -127,8 +127,11 @@ onMounted(async () => {
           </select>
         </div>
         <div>
-          <label>Matrícula</label>
-          <input v-model="filtros.matricula" placeholder="1234 ABC" @change="cargar" />
+          <label>Moto</label>
+          <select v-model="filtros.matricula" @change="cargar">
+            <option value="">Todas</option>
+            <option v-for="m in MOTOS" :key="m">{{ m }}</option>
+          </select>
         </div>
         <div>
           <label>Mes</label>

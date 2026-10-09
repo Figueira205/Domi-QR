@@ -3,6 +3,9 @@ export const EMPRESA = 'SUMINISTROS MÉDICOS ANDALUCES SA'
 // Lista de conductores que aparece en los formularios. Añade o quita nombres aquí.
 export const CONDUCTORES = ['Sofian', 'Alejandro']
 
+// Motocicletas disponibles (matrículas). Añade o quita aquí si cambian.
+export const MOTOS = ['6610LTS', '6601LTS']
+
 // Elementos del checklist (mismo orden que el papel).
 export const ELEMENTOS = [
   { key: 'neumaticos', label: 'Neumáticos', ayuda: 'Presión, desgaste, cortes o deformaciones' },
