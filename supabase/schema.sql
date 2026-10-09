@@ -200,6 +200,37 @@ begin
 end;
 $$;
 
+-- Toda salida (también las que crea el administrador) exige una entrada del mismo empleado
+-- ese día y se guarda con la moto de la entrada.
+create or replace function public.registros_salida_con_entrada()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_matricula text;
+begin
+  if new.tipo = 'salida' and new.empleado_id is not null then
+    select matricula into v_matricula
+    from public.registros
+    where empleado_id = new.empleado_id and tipo = 'entrada' and dia = new.dia
+    order by created_at desc
+    limit 1;
+    if v_matricula is null then
+      raise exception 'SIN_ENTRADA' using errcode = 'SE001';
+    end if;
+    new.matricula := v_matricula;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists registros_salida_con_entrada on public.registros;
+create trigger registros_salida_con_entrada
+  before insert or update on public.registros
+  for each row execute function public.registros_salida_con_entrada();
+
 revoke all on function public.verificar_pin(text) from public;
 revoke all on function public.entrada_del_turno(text, uuid) from public;
 revoke all on function public.registrar_turno(text, uuid, text, text, jsonb, text, boolean, text, boolean) from public;

@@ -82,7 +82,7 @@ El administrador entra en `/#/admin` con su contraseña.
 - **Hoja mensual en PDF por empleado**, con el formato oficial de la empresa.
 - **Gestión de empleados**: crear, modificar y eliminar (nombre completo y PIN, sin PIN repetidos).
 - **Alta de registros pasados**, para días en que un empleado olvidó fichar.
-- **Modificar y eliminar cualquier registro**, sea quien sea quien lo creó: al tocar un registro aparecen las opciones *Modificar* y *Eliminar*. Antes de borrar se pide confirmación, porque el borrado es **permanente**.
+- **Modificar y eliminar cualquier registro**, sea quien sea quien lo creó: al tocar un registro aparecen las opciones *Modificar* y *Eliminar*. Al modificar se puede cambiar el empleado, el **día y la hora**, la moto y el estado. Antes de borrar se pide confirmación, porque el borrado es **permanente**.
 
 ## Reglas de funcionamiento
 
@@ -92,7 +92,7 @@ Pensadas para el día a día real de la tienda:
 - **Un registro de entrada y uno de salida por empleado y día.** No se pueden crear dos entradas, ni dos salidas, para el mismo día. Vale tanto para los empleados como para el administrador.
 - **Aviso antes de sustituir.** Si un empleado intenta registrar una entrada (o salida) cuando ya tiene una ese día, ve un mensaje como *«Ya registraste tu entrada de hoy (a las 09:02). ¿Quieres sustituirla por esta nueva entrada ahora mismo?»*. Si confirma, la anterior se sustituye por la nueva; si cancela, no cambia nada.
 - **Turnos de madrugada.** Como el reparto puede terminar pasada la medianoche, **las salidas registradas hasta la 1:30 de la madrugada (hora de Madrid) cuentan para el día anterior**. Así la salida queda en el mismo día de trabajo que su entrada, en el listado y en la hoja PDF. La hora real se conserva y el panel la marca como *«madrugada siguiente»*.
-- **El administrador tiene la última palabra.** Puede modificar o eliminar cualquier registro. Si una salida tiene su entrada ese día, su moto queda fijada a la de la entrada. Al modificarlo se aplican las mismas reglas: no puede dejar dos registros del mismo tipo en un día. Eliminar pide confirmación y no se puede deshacer.
+- **El administrador tiene la última palabra, pero cumple las mismas normas.** Puede modificar o eliminar cualquier registro, y elegir la hora de los que crea o modifica. Pero **no puede registrar una salida sin una entrada ese día**: la salida toma automáticamente la moto de la entrada. Tampoco puede eliminar una entrada que tiene salida (primero hay que eliminar la salida). Estas reglas las impone la propia base de datos, no solo el panel. Al modificarlo se aplican las mismas reglas: no puede dejar dos registros del mismo tipo en un día. Eliminar pide confirmación y no se puede deshacer.
 
 ## Capturas de pantalla
 
