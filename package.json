@@ -1,8 +1,26 @@
 {
   "name": "revision-ciclomotores",
-  "version": "0.1.0",
+  "version": "1.0.0",
+  "description": "Registro digital de entrada/salida y checklist diario de ciclomotores de reparto, con hoja mensual en PDF.",
   "private": true,
   "type": "module",
+  "homepage": "https://figueira205.github.io/Domi-QR/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Figueira205/Domi-QR.git"
+  },
+  "keywords": [
+    "vue",
+    "vite",
+    "supabase",
+    "checklist",
+    "qr",
+    "pdf",
+    "github-pages"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
