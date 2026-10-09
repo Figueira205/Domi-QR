@@ -6,7 +6,7 @@ const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1)
 
 // Resume los registros de un empleado por día del mes.
 // estado[dia][elemento] = true (Bien) | false (Mal) ; entrada[dia] / salida[dia] = nombre
-export function resumirMes(registros) {
+export function resumirMes(registros, nombre) {
   const estado = {}
   const entrada = {}
   const salida = {}
@@ -14,7 +14,7 @@ export function resumirMes(registros) {
   for (const r of ordenados) {
     const d = new Date(r.created_at).getDate()
     if (r.tipo === 'entrada') {
-      entrada[d] ??= r.conductor
+      entrada[d] ??= nombre
       const dia = (estado[d] ??= {})
       for (const e of ELEMENTOS) {
         const v = r.checks?.[e.key]
@@ -22,7 +22,7 @@ export function resumirMes(registros) {
         else if (v === true && dia[e.key] !== false) dia[e.key] = true
       }
     } else if (r.tipo === 'salida') {
-      salida[d] = r.conductor // la última salida del día
+      salida[d] = nombre // basta con que haya salida ese día
     }
   }
   return { estado, entrada, salida }
@@ -44,10 +44,14 @@ function textoVertical(doc, texto, xCelda, w, yInicio, size) {
 }
 
 // Hoja mensual de un empleado (A4 vertical), formato del checklist de revisión diaria.
-export function construirHojaMensual({ registros, mes, conductor }) {
+export function construirHojaMensual({ registros, mes, nombre }) {
   const [anio, m] = mes.split('-').map(Number)
   const diasMes = new Date(anio, m, 0).getDate()
-  const { estado, entrada, salida } = resumirMes(registros)
+  const nombreFirma = nombre.toUpperCase()
+  const { estado, entrada, salida } = resumirMes(registros, nombreFirma)
+  // Moto: la del primer registro del mes de ese empleado
+  const primero = [...registros].sort((a, b) => a.created_at.localeCompare(b.created_at)).find((r) => r.matricula)
+  const matricula = primero?.matricula ?? ''
 
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
   doc.setTextColor(20)
@@ -104,7 +108,7 @@ export function construirHojaMensual({ registros, mes, conductor }) {
 
   // Bloques de firma (a la derecha): nombre del empleado cuando fichó la entrada / la salida
   const bloques = [
-    { x: 91.3, w: 49, titulo: 'FIRMA 1: • Al inicio de turno', nombres: entrada },
+    { x: 91.3, w: 49, titulo: 'FIRMA 1: • Al inicio de turno', nombres: entrada, matricula },
     { x: 146, w: 49.6, titulo: 'FIRMA 2: • Al final del turno', nombres: salida },
   ]
   for (const b of bloques) {
@@ -115,6 +119,11 @@ export function construirHojaMensual({ registros, mes, conductor }) {
     doc.setFont('helvetica', 'normal')
     doc.setFontSize(9.5)
     doc.text(b.titulo, b.x + 1.5, 44.5)
+    if (b.matricula) {
+      doc.setFont('helvetica', 'bold')
+      doc.text(`Matrícula: ${b.matricula}`, b.x + 1.5, 36.5)
+      doc.setFont('helvetica', 'normal')
+    }
     doc.setLineWidth(0.25)
     doc.setDrawColor(70)
     for (let d = 1; d <= 31; d++) {
@@ -156,5 +165,5 @@ export function construirHojaMensual({ registros, mes, conductor }) {
 
 export function generarHojaMensual(opts) {
   const doc = construirHojaMensual(opts)
-  doc.save(`checklist_${opts.conductor.replace(/\s+/g, '_')}_${opts.mes}.pdf`)
+  doc.save(`checklist_${opts.nombre.replace(/\s+/g, '_')}_${opts.mes}.pdf`)
 }

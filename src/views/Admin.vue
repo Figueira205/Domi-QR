@@ -1,9 +1,10 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import { CONDUCTORES, ELEMENTOS, MOTOS } from '../lib/config'
+import { ELEMENTOS, MOTOS } from '../lib/config'
 import { supabase, configurado, ADMIN_EMAIL } from '../lib/supabase'
 import { generarHojaMensual } from '../lib/pdf'
 import AnadirRegistro from '../components/AnadirRegistro.vue'
+import Empleados from '../components/Empleados.vue'
 
 const sesion = ref(false)
 const password = ref('')
@@ -11,6 +12,8 @@ const errorLogin = ref('')
 const cargando = ref(false)
 const error = ref('')
 const registros = ref([])
+const empleados = ref([])
+const vista = ref('registros')
 
 const hoy = new Date()
 const filtros = ref({
@@ -36,7 +39,7 @@ function rangoMes(mes) {
 async function consulta(extra = {}) {
   const f = { ...filtros.value, ...extra }
   let q = supabase.from('registros').select('*').order('created_at', { ascending: false }).limit(2000)
-  if (f.conductor) q = q.eq('conductor', f.conductor)
+  if (f.conductor) q = q.eq('empleado_id', f.conductor)
   if (f.matricula) q = q.ilike('matricula', `%${f.matricula.toUpperCase().trim()}%`)
   if (f.tipo) q = q.eq('tipo', f.tipo)
   if (f.mes) {
@@ -55,19 +58,32 @@ async function cargar() {
   else registros.value = data
 }
 
+async function cargarEmpleados() {
+  const { data, error: err } = await supabase.from('empleados').select('*').order('nombre')
+  if (err) error.value = 'No se pudieron cargar los empleados.'
+  else empleados.value = data
+}
+
+async function iniciar() {
+  await cargarEmpleados()
+  cargar()
+}
+
 async function entrar() {
   errorLogin.value = ''
   const { error: err } = await supabase.auth.signInWithPassword({ email: ADMIN_EMAIL, password: password.value })
   if (err) { errorLogin.value = 'Contraseña incorrecta.'; return }
   password.value = ''
   sesion.value = true
-  cargar()
+  iniciar()
 }
 
 async function salir() {
   await supabase.auth.signOut()
   sesion.value = false
   registros.value = []
+  empleados.value = []
+  vista.value = 'registros'
 }
 
 async function descargarPdf() {
@@ -78,7 +94,7 @@ async function descargarPdf() {
   const { data, error: err } = await supabase
     .from('registros')
     .select('*')
-    .eq('conductor', pdfEmpleado.value)
+    .eq('empleado_id', pdfEmpleado.value)
     .gte('created_at', d)
     .lt('created_at', h)
     .order('created_at')
@@ -86,13 +102,14 @@ async function descargarPdf() {
   generando.value = false
   if (err) { error.value = 'No se pudieron cargar los datos de la hoja.'; return }
   if (!data.length) { error.value = 'Ese empleado no tiene registros en ese mes.'; return }
-  generarHojaMensual({ registros: data, mes: pdfMes.value, conductor: pdfEmpleado.value })
+  const emp = empleados.value.find((e) => e.id === pdfEmpleado.value)
+  generarHojaMensual({ registros: data, mes: pdfMes.value, nombre: emp.nombre })
 }
 
 onMounted(async () => {
   if (!configurado) return
   const { data } = await supabase.auth.getSession()
-  if (data.session) { sesion.value = true; cargar() }
+  if (data.session) { sesion.value = true; iniciar() }
 })
 </script>
 
@@ -109,13 +126,21 @@ onMounted(async () => {
   </form>
 
   <template v-else>
+    <div class="grid2" style="margin-bottom:1rem">
+      <button :class="vista === 'registros' ? '' : 'sec'" @click="vista = 'registros'">Registros</button>
+      <button :class="vista === 'empleados' ? '' : 'sec'" @click="vista = 'empleados'">Empleados</button>
+    </div>
+
+    <Empleados v-if="vista === 'empleados'" :empleados="empleados" @cambio="cargarEmpleados" />
+
+    <template v-else>
     <div class="card">
       <div class="grid2">
         <div>
-          <label>Conductor</label>
+          <label>Empleado</label>
           <select v-model="filtros.conductor" @change="cargar">
             <option value="">Todos</option>
-            <option v-for="c in CONDUCTORES" :key="c">{{ c }}</option>
+            <option v-for="e in empleados" :key="e.id" :value="e.id">{{ e.nombre }}</option>
           </select>
         </div>
         <div>
@@ -148,7 +173,7 @@ onMounted(async () => {
           <label>Empleado</label>
           <select v-model="pdfEmpleado">
             <option value="" disabled>Selecciona</option>
-            <option v-for="c in CONDUCTORES" :key="c">{{ c }}</option>
+            <option v-for="e in empleados" :key="e.id" :value="e.id">{{ e.nombre }}</option>
           </select>
         </div>
         <div>
@@ -161,7 +186,7 @@ onMounted(async () => {
       <p v-if="error" class="error">{{ error }}</p>
     </div>
 
-    <AnadirRegistro @guardado="cargar" />
+    <AnadirRegistro :empleados="empleados" @guardado="cargar" />
 
     <p v-if="cargando">Cargando…</p>
     <p v-else>{{ registros.length }} registros</p>
@@ -180,7 +205,8 @@ onMounted(async () => {
         <span v-if="r.actuacion"><br /><em>Actuación: {{ r.actuacion }}</em></span>
       </p>
     </div>
+    </template>
 
-    <button class="sec full" @click="salir">Cerrar sesión</button>
+    <button class="sec full" style="margin-top:1rem" @click="salir">Cerrar sesión</button>
   </template>
 </template>

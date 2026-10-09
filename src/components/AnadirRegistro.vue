@@ -1,14 +1,15 @@
 <script setup>
 import { computed, reactive, ref } from 'vue'
-import { CONDUCTORES, ELEMENTOS, MOTOS } from '../lib/config'
+import { ELEMENTOS, MOTOS } from '../lib/config'
 import { supabase } from '../lib/supabase'
 
+const props = defineProps({ empleados: { type: Array, required: true } })
 const emit = defineEmits(['guardado'])
 
 const hoy = new Date()
 const fechaMax = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`
 
-const conductor = ref('')
+const empleadoId = ref('')
 const fecha = ref('')
 const tipo = ref('entrada')
 const matricula = ref('')
@@ -22,7 +23,7 @@ const ok = ref('')
 const hayMal = computed(() => tipo.value === 'entrada' && Object.values(checks).some((v) => v === false))
 const matriculaLimpia = computed(() => matricula.value.toUpperCase().replace(/\s+/g, ' ').trim())
 const valido = computed(
-  () => conductor.value && fecha.value && matriculaLimpia.value.length >= 3 && (!hayMal.value || incidencia.value.trim()),
+  () => empleadoId.value && fecha.value && matriculaLimpia.value.length >= 3 && (!hayMal.value || incidencia.value.trim()),
 )
 
 async function guardar() {
@@ -31,9 +32,11 @@ async function guardar() {
   guardando.value = true
   const [a, m, d] = fecha.value.split('-').map(Number)
   const hora = tipo.value === 'entrada' ? 9 : 17
+  const emp = props.empleados.find((e) => e.id === empleadoId.value)
   const fila = {
     tipo: tipo.value,
-    conductor: conductor.value,
+    conductor: emp.nombre,
+    empleado_id: emp.id,
     matricula: matriculaLimpia.value,
     created_at: new Date(a, m - 1, d, hora, 0).toISOString(),
     checks: tipo.value === 'entrada' ? { ...checks } : null,
@@ -43,7 +46,7 @@ async function guardar() {
   const { error: err } = await supabase.from('registros').insert(fila)
   guardando.value = false
   if (err) { error.value = 'No se pudo guardar el registro.'; return }
-  ok.value = `Registro de ${tipo.value} añadido (${conductor.value}, ${fecha.value}).`
+  ok.value = `Registro de ${tipo.value} añadido (${emp.nombre}, ${fecha.value}).`
   incidencia.value = ''
   afecta.value = false
   ELEMENTOS.forEach((e) => (checks[e.key] = true))
@@ -59,9 +62,9 @@ async function guardar() {
       <div class="grid2">
         <div>
           <label>Empleado</label>
-          <select v-model="conductor" required>
+          <select v-model="empleadoId" required>
             <option value="" disabled>Selecciona</option>
-            <option v-for="c in CONDUCTORES" :key="c">{{ c }}</option>
+            <option v-for="e in empleados" :key="e.id" :value="e.id">{{ e.nombre }}</option>
           </select>
         </div>
         <div>
