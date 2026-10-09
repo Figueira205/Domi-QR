@@ -6,7 +6,7 @@ import { generarHojaMensual } from '../lib/pdf'
 import AnadirRegistro from '../components/AnadirRegistro.vue'
 import Empleados from '../components/Empleados.vue'
 import EditarRegistro from '../components/EditarRegistro.vue'
-import { rangoMesDia, fechaCorta, horaLocal, esDiaSiguiente } from '../lib/dias'
+import { rangoMesDia, fechaCorta, horaLocal, esDiaSiguiente, registroExistente } from '../lib/dias'
 
 const sesion = ref(false)
 const password = ref('')
@@ -97,15 +97,26 @@ function cerrarEdicion(recargar) {
 }
 
 async function eliminar(r) {
+  error.value = ''
+  if (r.tipo === 'entrada' && r.empleado_id) {
+    try {
+      if (await registroExistente({ empleadoId: r.empleado_id, tipo: 'salida', dia: r.dia })) {
+        window.alert(`No se puede eliminar esta entrada: ${r.conductor} tiene una salida el ${fechaCorta(r.dia)}.\n\nElimina primero la salida.`)
+        return
+      }
+    } catch {
+      window.alert('No se pudo comprobar si esta entrada tiene salida. Inténtalo de nuevo.')
+      return
+    }
+  }
   const ok = window.confirm(
     `¿Eliminar este registro de ${r.tipo} de ${r.conductor} (${fechaCorta(r.dia)})?\n\nSe borrará de forma permanente y no se podrá recuperar.`,
   )
   if (!ok) return
-  error.value = ''
   eliminando.value = true
   const { error: err } = await supabase.from('registros').delete().eq('id', r.id)
   eliminando.value = false
-  if (err) { error.value = 'No se pudo eliminar el registro.'; return }
+  if (err) { window.alert('No se pudo eliminar el registro.'); return }
   seleccionado.value = null
   cargar()
 }

@@ -20,11 +20,23 @@ export const esDiaSiguiente = (iso, dia) => {
   return local !== dia
 }
 
-// Hora a la que se guarda un registro creado o movido a mano a un día concreto
-export const instanteDeDia = (dia, tipo) => {
+// Instante real de un registro dado su día de trabajo y su hora ('HH:MM').
+// Las salidas hasta la 1:30 pertenecen al día anterior: su hora real es de madrugada, ya en el día natural siguiente.
+export const instanteDeDia = (dia, tipo, hora) => {
   const [a, m, d] = dia.split('-').map(Number)
-  return new Date(a, m - 1, d, tipo === 'entrada' ? 9 : 17, 0).toISOString()
+  const [hh, mm] = (hora || (tipo === 'entrada' ? '09:00' : '17:00')).split(':').map(Number)
+  const madrugada = tipo === 'salida' && (hh < 1 || (hh === 1 && mm <= 30))
+  return new Date(a, m - 1, d + (madrugada ? 1 : 0), hh, mm).toISOString()
 }
+
+// Hora local ('HH:MM') de un instante ISO, para los campos de hora
+export const horaDeInstante = (iso) => {
+  const d = new Date(iso)
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}
+
+// Hora por defecto al crear un registro a mano
+export const horaPorDefecto = (tipo) => (tipo === 'entrada' ? '09:00' : '17:00')
 
 // Devuelve el registro que ya existe para ese empleado, tipo y día (o null)
 export async function registroExistente({ empleadoId, tipo, dia, exceptoId = null }) {

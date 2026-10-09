@@ -2,7 +2,7 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { ELEMENTOS, MOTOS } from '../lib/config'
 import { supabase } from '../lib/supabase'
-import { instanteDeDia, registroExistente, fechaCorta, entradaDelDia } from '../lib/dias'
+import { instanteDeDia, registroExistente, fechaCorta, entradaDelDia, horaPorDefecto } from '../lib/dias'
 
 const props = defineProps({ empleados: { type: Array, required: true } })
 const emit = defineEmits(['guardado'])
@@ -13,6 +13,8 @@ const fechaMax = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, 
 const empleadoId = ref('')
 const fecha = ref('')
 const tipo = ref('entrada')
+const hora = ref(horaPorDefecto('entrada'))
+const sinEntrada = ref(false) // en una salida: ese empleado no tiene entrada ese día
 const matricula = ref('')
 const motoEntrada = ref(null) // moto de la entrada de ese día, si ya existe (la salida debe usarla)
 const checks = reactive(Object.fromEntries(ELEMENTOS.map((e) => [e.key, true])))
@@ -25,16 +27,26 @@ const ok = ref('')
 const hayMal = computed(() => tipo.value === 'entrada' && Object.values(checks).some((v) => v === false))
 const matriculaLimpia = computed(() => matricula.value.toUpperCase().replace(/\s+/g, ' ').trim())
 const valido = computed(
-  () => empleadoId.value && fecha.value && matriculaLimpia.value.length >= 3 && (!hayMal.value || incidencia.value.trim()),
+  () =>
+    empleadoId.value &&
+    fecha.value &&
+    hora.value &&
+    matriculaLimpia.value.length >= 3 &&
+    !sinEntrada.value &&
+    (!hayMal.value || incidencia.value.trim()),
 )
+
+watch(tipo, (t) => (hora.value = horaPorDefecto(t)))
 
 // La salida lleva la moto de la entrada de ese día
 watch([empleadoId, fecha, tipo], async () => {
   motoEntrada.value = null
+  sinEntrada.value = false
   if (tipo.value !== 'salida' || !empleadoId.value || !fecha.value) return
   try {
     const e = await entradaDelDia({ empleadoId: empleadoId.value, dia: fecha.value })
     motoEntrada.value = e?.matricula ?? null
+    sinEntrada.value = !e
     if (e) matricula.value = e.matricula
   } catch {
     motoEntrada.value = null
@@ -47,6 +59,15 @@ async function guardar() {
   guardando.value = true
   const emp = props.empleados.find((e) => e.id === empleadoId.value)
   try {
+    if (tipo.value === 'salida') {
+      const entrada = await entradaDelDia({ empleadoId: emp.id, dia: fecha.value })
+      if (!entrada) {
+        error.value = `${emp.nombre} no tiene entrada el ${fechaCorta(fecha.value)}. Registra primero la entrada para poder registrar la salida.`
+        guardando.value = false
+        return
+      }
+      matricula.value = entrada.matricula
+    }
     if (await registroExistente({ empleadoId: emp.id, tipo: tipo.value, dia: fecha.value })) {
       error.value = `${emp.nombre} ya tiene una ${tipo.value} el ${fechaCorta(fecha.value)}. Modifica ese registro desde la lista en vez de crear otro.`
       guardando.value = false
@@ -63,7 +84,7 @@ async function guardar() {
     empleado_id: emp.id,
     matricula: matriculaLimpia.value,
     dia: fecha.value,
-    created_at: instanteDeDia(fecha.value, tipo.value),
+    created_at: instanteDeDia(fecha.value, tipo.value, hora.value),
     checks: tipo.value === 'entrada' ? { ...checks } : null,
     incidencia: incidencia.value.trim() || null,
     afecta_seguridad: incidencia.value.trim() ? afecta.value : false,
@@ -93,10 +114,6 @@ async function guardar() {
           </select>
         </div>
         <div>
-          <label>Fecha</label>
-          <input v-model="fecha" type="date" :max="fechaMax" required />
-        </div>
-        <div>
           <label>Registro</label>
           <select v-model="tipo">
             <option value="entrada">Entrada</option>
@@ -104,16 +121,23 @@ async function guardar() {
           </select>
         </div>
         <div>
-          <label>Ciclomotor</label>
-          <select v-model="matricula" required :disabled="Boolean(motoEntrada)">
-            <option value="" disabled>Selecciona</option>
-            <option v-for="m in MOTOS" :key="m">{{ m }}</option>
-          </select>
+          <label>Día de trabajo</label>
+          <input v-model="fecha" type="date" :max="fechaMax" required />
+        </div>
+        <div>
+          <label>Hora</label>
+          <input v-model="hora" type="time" required />
         </div>
       </div>
+      <label>Ciclomotor</label>
+      <select v-model="matricula" required :disabled="Boolean(motoEntrada)">
+        <option value="" disabled>Selecciona</option>
+        <option v-for="m in MOTOS" :key="m">{{ m }}</option>
+      </select>
 
       <p v-if="tipo === 'salida' && motoEntrada"><small>La salida usa la moto de la entrada de ese día ({{ motoEntrada }}).</small></p>
-      <p v-else-if="tipo === 'salida' && empleadoId && fecha"><small>⚠ Ese empleado no tiene entrada ese día. Si puedes, añade primero la entrada.</small></p>
+      <p v-else-if="tipo === 'salida' && sinEntrada" class="error">Ese empleado no tiene entrada ese día. Registra primero la entrada para poder registrar la salida.</p>
+      <p v-if="tipo === 'salida'"><small>Las salidas hasta la 1:30 de la madrugada cuentan para el día de trabajo anterior.</small></p>
 
       <template v-if="tipo === 'entrada'">
         <label>Estado de la moto ese día</label>

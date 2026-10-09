@@ -3,6 +3,15 @@
 Todos los cambios relevantes del proyecto se documentan en este archivo.
 El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 
+## [1.3.0] - 2026-10-09
+
+### Añadido
+- Al **modificar o añadir un registro** desde el panel, ahora se puede elegir también la **hora**, además del día de trabajo. Una salida a una hora hasta la 1:30 se guarda en la madrugada siguiente, pero cuenta para el día elegido.
+- El administrador **cumple la norma de la salida**: no puede registrar una salida sin una entrada ese día, y la salida toma automáticamente la moto de la entrada.
+- No se puede eliminar una entrada que tiene salida ese día, ni mover una entrada dejando sin entrada a su salida.
+- Restricción en la base de datos (disparador `registros_salida_con_entrada`) que exige la entrada y fija la moto de la salida, aunque se intente saltar el panel.
+- Restricción única por empleado, tipo y día (`registros_unico_por_dia`) aplicada en la base de datos.
+
 ## [1.2.0] - 2026-10-09
 
 ### Añadido
