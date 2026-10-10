@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🛵 Revisión diaria de ciclomotores
+#  Revisión diaria de ciclomotores
 
 **Registro digital de entrada y salida y checklist diario del estado de los ciclomotores de reparto.**
 
@@ -50,11 +50,11 @@ Esta aplicación **sustituye el papel por el móvil**:
 
 ```mermaid
 flowchart LR
-    A["📱 El empleado escanea el QR"] --> B["🔢 Introduce su PIN"]
-    B --> C["📝 Elige la moto y marca Bien / Mal"]
-    C --> D[("🗄️ Base de datos")]
-    D --> E["👤 El administrador revisa los registros"]
-    E --> F["📄 Genera la hoja mensual en PDF"]
+    A[" El empleado escanea el QR"] --> B[" Introduce su PIN"]
+    B --> C[" Elige la moto y marca Bien / Mal"]
+    C --> D[(" Base de datos")]
+    D --> E[" El administrador revisa los registros"]
+    E --> F[" Genera la hoja mensual en PDF"]
 ```
 
 Hay **dos códigos QR**, uno para cada momento del turno:
@@ -161,7 +161,7 @@ Al elegir un **empleado** y un **mes**, se genera una hoja A4 con el formato ofi
   <img src="docs/img/07-hoja-pdf.png" alt="Ejemplo de hoja mensual generada" width="620">
 </p>
 
-📄 [Ver el PDF de ejemplo](docs/ejemplo-hoja-mensual.pdf) (datos ficticios).
+ [Ver el PDF de ejemplo](docs/ejemplo-hoja-mensual.pdf) (datos ficticios).
 
 ## Tecnologías
 
@@ -180,13 +180,13 @@ Es una **aplicación de una sola página sin servidor propio**: todo el código 
 
 ```mermaid
 flowchart TB
-    subgraph Navegador["📱 Navegador (Vue 3 en GitHub Pages)"]
+    subgraph Navegador[" Navegador (Vue 3 en GitHub Pages)"]
         E["Entrada / Salida"]
         A["Panel de administración"]
         P["Generador de PDF (jsPDF)"]
     end
 
-    subgraph Supabase["☁️ Supabase"]
+    subgraph Supabase[" Supabase"]
         R["Funciones RPC<br/>verificar_pin · entrada_del_turno<br/>registrar_turno"]
         AU["Auth (administrador)"]
         DB[("PostgreSQL + RLS<br/>empleados · registros")]
