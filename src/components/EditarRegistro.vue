@@ -2,6 +2,8 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ELEMENTOS, MOTOS } from '../lib/config'
 import { supabase } from '../lib/supabase'
+import { compactar } from '../lib/checks'
+import EstadoMoto from './EstadoMoto.vue'
 import { instanteDeDia, registroExistente, fechaCorta, entradaDelDia, horaDeInstante } from '../lib/dias'
 
 const props = defineProps({
@@ -20,7 +22,8 @@ const hora = ref(horaDeInstante(r.created_at))
 const horaInicial = hora.value
 const sinEntrada = ref(false) // en una salida: ese empleado no tiene entrada ese día
 const matricula = ref(r.matricula)
-const checks = reactive(Object.fromEntries(ELEMENTOS.map((e) => [e.key, r.checks?.[e.key] ?? true])))
+// Entrada: por defecto todo Bien. Salida: el estado es opcional, por defecto sin indicar.
+const checks = reactive(Object.fromEntries(ELEMENTOS.map((e) => [e.key, r.checks?.[e.key] ?? (r.tipo === 'entrada' ? true : null)])))
 const incidencia = ref(r.incidencia ?? '')
 const afecta = ref(Boolean(r.afecta_seguridad))
 const actuacion = ref(r.actuacion ?? '')
@@ -30,7 +33,7 @@ const error = ref('')
 
 const motos = computed(() => (MOTOS.includes(matricula.value) ? MOTOS : [matricula.value, ...MOTOS]))
 const esEntrada = r.tipo === 'entrada'
-const hayMal = computed(() => esEntrada && Object.values(checks).some((v) => v === false))
+const hayMal = computed(() => Object.values(checks).some((v) => v === false))
 // Una salida debe llevar la moto de la entrada de ese mismo día
 async function buscarMotoEntrada() {
   motoEntrada.value = null
@@ -89,7 +92,7 @@ async function guardar() {
     conductor: emp.nombre,
     matricula: matricula.value,
     dia: dia.value,
-    checks: esEntrada ? { ...checks } : null,
+    checks: esEntrada ? { ...checks } : compactar(checks),
     incidencia: incidencia.value.trim() || null,
     afecta_seguridad: incidencia.value.trim() ? afecta.value : false,
     actuacion: actuacion.value.trim() || null,
@@ -135,18 +138,11 @@ async function guardar() {
     </select>
     <small v-if="motoEntrada">La salida usa la moto de la entrada de ese día. Para cambiarla, modifica la entrada.</small>
 
-    <template v-if="esEntrada">
-      <label>Estado de la moto</label>
-      <div v-for="e in ELEMENTOS" :key="e.key" class="item">
-        <div class="nombre">{{ e.label }}</div>
-        <div class="toggle">
-          <button type="button" class="bien" :class="{ on: checks[e.key] === true }" @click="checks[e.key] = true">Bien</button>
-          <button type="button" class="mal" :class="{ on: checks[e.key] === false }" @click="checks[e.key] = false">Mal</button>
-        </div>
-      </div>
-    </template>
+    <label>{{ esEntrada ? 'Estado de la moto' : 'Estado de la moto al terminar (opcional)' }}</label>
+    <small v-if="!esEntrada">Marca solo lo que quieras indicar. Toca de nuevo un botón para quitar la marca.</small>
+    <EstadoMoto :checks="checks" :opcional="!esEntrada" />
 
-    <label>Incidencia{{ hayMal ? ' (obligatoria si algo está mal)' : ' (opcional)' }}</label>
+    <label>{{ esEntrada ? 'Incidencia' : 'Incidencia durante el turno' }}{{ hayMal ? ' (obligatoria si algo está mal)' : ' (opcional)' }}</label>
     <textarea v-model="incidencia" />
     <label v-if="incidencia.trim()"><input v-model="afecta" type="checkbox" style="width:auto" /> Afecta a la seguridad</label>
     <label>Actuación realizada (opcional)</label>
