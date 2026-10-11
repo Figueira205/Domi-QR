@@ -2,6 +2,8 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { ELEMENTOS, MOTOS } from '../lib/config'
 import { supabase } from '../lib/supabase'
+import { compactar } from '../lib/checks'
+import EstadoMoto from './EstadoMoto.vue'
 import { instanteDeDia, registroExistente, fechaCorta, entradaDelDia, horaPorDefecto } from '../lib/dias'
 
 const props = defineProps({ empleados: { type: Array, required: true } })
@@ -24,7 +26,7 @@ const guardando = ref(false)
 const error = ref('')
 const ok = ref('')
 
-const hayMal = computed(() => tipo.value === 'entrada' && Object.values(checks).some((v) => v === false))
+const hayMal = computed(() => Object.values(checks).some((v) => v === false))
 const matriculaLimpia = computed(() => matricula.value.toUpperCase().replace(/\s+/g, ' ').trim())
 const valido = computed(
   () =>
@@ -36,7 +38,11 @@ const valido = computed(
     (!hayMal.value || incidencia.value.trim()),
 )
 
-watch(tipo, (t) => (hora.value = horaPorDefecto(t)))
+watch(tipo, (t) => {
+  hora.value = horaPorDefecto(t)
+  // Entrada: todo Bien por defecto. Salida: estado opcional, sin indicar.
+  ELEMENTOS.forEach((e) => (checks[e.key] = t === 'entrada' ? true : null))
+})
 
 // La salida lleva la moto de la entrada de ese día
 watch([empleadoId, fecha, tipo], async () => {
@@ -85,7 +91,7 @@ async function guardar() {
     matricula: matriculaLimpia.value,
     dia: fecha.value,
     created_at: instanteDeDia(fecha.value, tipo.value, hora.value),
-    checks: tipo.value === 'entrada' ? { ...checks } : null,
+    checks: tipo.value === 'entrada' ? { ...checks } : compactar(checks),
     incidencia: incidencia.value.trim() || null,
     afecta_seguridad: incidencia.value.trim() ? afecta.value : false,
   }
@@ -95,7 +101,7 @@ async function guardar() {
   ok.value = `Registro de ${tipo.value} añadido (${emp.nombre}, ${fechaCorta(fecha.value)}).`
   incidencia.value = ''
   afecta.value = false
-  ELEMENTOS.forEach((e) => (checks[e.key] = true))
+  ELEMENTOS.forEach((e) => (checks[e.key] = tipo.value === 'entrada' ? true : null))
   emit('guardado')
 }
 </script>
@@ -139,18 +145,11 @@ async function guardar() {
       <p v-else-if="tipo === 'salida' && sinEntrada" class="error">Ese empleado no tiene entrada ese día. Registra primero la entrada para poder registrar la salida.</p>
       <p v-if="tipo === 'salida'"><small>Las salidas hasta la 1:30 de la madrugada cuentan para el día de trabajo anterior.</small></p>
 
-      <template v-if="tipo === 'entrada'">
-        <label>Estado de la moto ese día</label>
-        <div v-for="e in ELEMENTOS" :key="e.key" class="item">
-          <div class="nombre">{{ e.label }}</div>
-          <div class="toggle">
-            <button type="button" class="bien" :class="{ on: checks[e.key] === true }" @click="checks[e.key] = true">Bien</button>
-            <button type="button" class="mal" :class="{ on: checks[e.key] === false }" @click="checks[e.key] = false">Mal</button>
-          </div>
-        </div>
-      </template>
+      <label>{{ tipo === 'entrada' ? 'Estado de la moto ese día' : 'Estado de la moto al terminar (opcional)' }}</label>
+      <small v-if="tipo === 'salida'">Marca solo lo que quieras indicar. Toca de nuevo un botón para quitar la marca.</small>
+      <EstadoMoto :checks="checks" :opcional="tipo === 'salida'" />
 
-      <label>Incidencia (opcional{{ hayMal ? ', obligatoria si algo está mal' : '' }})</label>
+      <label>{{ tipo === 'entrada' ? 'Incidencia' : 'Incidencia durante el turno' }} (opcional{{ hayMal ? ', obligatoria si algo está mal' : '' }})</label>
       <textarea v-model="incidencia" />
       <label v-if="incidencia.trim()"><input v-model="afecta" type="checkbox" style="width:auto" /> Afecta a la seguridad</label>
 

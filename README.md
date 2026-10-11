@@ -82,7 +82,8 @@ El administrador entra en `/#/admin` con su contraseña.
 - **Hoja mensual en PDF por empleado**, con el formato oficial de la empresa.
 - **Gestión de empleados**: crear, modificar y eliminar (nombre completo y PIN, sin PIN repetidos).
 - **Alta de registros pasados**, para días en que un empleado olvidó fichar.
-- **Modificar y eliminar cualquier registro**, sea quien sea quien lo creó: al tocar un registro aparecen las opciones *Modificar* y *Eliminar*. Al modificar se puede cambiar el empleado, el **día y la hora**, la moto y el estado. Antes de borrar se pide confirmación, porque el borrado es **permanente**.
+- **Modificar y eliminar cualquier registro**, sea quien sea quien lo creó: al tocar un registro aparecen las opciones *Modificar* y *Eliminar*. Al modificar se puede cambiar el empleado, el **día y la hora**, la moto, el estado y la incidencia. Antes de borrar se pide confirmación, porque el borrado es **permanente**.
+- **Estado de la moto e incidencias también en las salidas.** Al modificar o añadir una salida, el administrador puede marcar (de forma opcional) el estado de los 11 elementos al terminar el turno y anotar la **incidencia durante el turno**, si afecta a la seguridad y la actuación realizada.
 
 ## Reglas de funcionamiento
 
@@ -148,6 +149,12 @@ Pensadas para el día a día real de la tienda:
     <td valign="top"><img src="docs/img/10-admin-editar.png" alt="Formulario para modificar un registro" width="420"></td>
   </tr>
 </table>
+
+**Modificar una salida:** además de la incidencia, se puede indicar el estado de la moto al terminar (opcional: solo se guardan los elementos marcados).
+
+<p align="center">
+  <img src="docs/img/12-admin-editar-salida.png" alt="Modificar una salida con el estado de la moto y la incidencia durante el turno" width="420">
+</p>
 
 ## La hoja mensual en PDF
 
@@ -216,12 +223,14 @@ Los empleados **no leen ni escriben directamente en las tablas**: solo pueden ll
 │   │   ├── config.js              # Motos y elementos del checklist
 │   │   ├── supabase.js            # Cliente de Supabase
 │   │   ├── dias.js                # Día de trabajo, fechas y comprobación de duplicados
+│   │   ├── checks.js              # Estado opcional de la moto en las salidas
 │   │   └── pdf.js                 # Generación de la hoja mensual
 │   ├── components/
 │   │   ├── PinGate.vue            # Pantalla de PIN
 │   │   ├── Empleados.vue          # Gestión de empleados
 │   │   ├── AnadirRegistro.vue     # Alta de registros pasados
 │   │   ├── EditarRegistro.vue     # Modificación de un registro
+│   │   ├── EstadoMoto.vue         # Listado Bien / Mal de los 11 elementos
 │   │   └── ConfirmarReemplazo.vue # Aviso «ya existe, ¿sustituir?»
 │   └── views/
 │       ├── Inicio.vue

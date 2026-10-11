@@ -3,6 +3,15 @@
 Todos los cambios relevantes del proyecto se documentan en este archivo.
 El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 
+## [1.3.1] - 2026-10-11
+
+### Corregido
+- Al modificar o añadir una **salida** desde el panel no aparecía el listado de estado de la moto, que solo se mostraba en las entradas.
+
+### Añadido
+- En las salidas, el administrador puede indicar (de forma opcional) el estado de los 11 elementos al terminar el turno y la **incidencia durante el turno**. Solo se guardan los elementos marcados; tocar de nuevo un botón quita la marca. Si algo se marca como *Mal*, la incidencia es obligatoria.
+- El listado de registros muestra «Al terminar: …» en las salidas que tienen estado indicado.
+
 ## [1.3.0] - 2026-10-09
 
 ### Añadido

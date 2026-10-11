@@ -32,6 +32,7 @@ const pdfMes = ref(filtros.value.mes)
 const generando = ref(false)
 
 const labels = Object.fromEntries(ELEMENTOS.map((e) => [e.key, e.label]))
+const tieneEstado = (r) => Object.values(r.checks || {}).some((v) => v === true || v === false)
 const malos = (r) => Object.entries(r.checks || {}).filter(([, v]) => v === false).map(([k]) => labels[k] || k)
 
 
@@ -243,7 +244,8 @@ onMounted(async () => {
             {{ fechaCorta(r.dia) }} · {{ horaLocal(r.created_at) }}<small v-if="esDiaSiguiente(r.created_at, r.dia)"> (madrugada siguiente)</small>
           </span>
         </div>
-        <p v-if="r.tipo === 'entrada'" style="margin:.5rem 0 0">
+        <p v-if="r.tipo === 'entrada' || tieneEstado(r)" style="margin:.5rem 0 0">
+          <span v-if="r.tipo === 'salida'">Al terminar: </span>
           <span v-if="malos(r).length" class="mal">Mal: {{ malos(r).join(', ') }}</span>
           <span v-else>Todo correcto</span>
         </p>
