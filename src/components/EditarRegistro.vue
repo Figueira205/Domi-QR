@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { ELEMENTOS, MOTOS } from '../lib/config'
+import { ELEMENTOS } from '../lib/config'
+import { motos as listaMotos } from '../lib/motos'
 import { supabase } from '../lib/supabase'
 import { compactar } from '../lib/checks'
 import EstadoMoto from './EstadoMoto.vue'
@@ -31,7 +32,8 @@ const guardando = ref(false)
 const motoEntrada = ref(null) // en una salida: la moto de la entrada de ese día
 const error = ref('')
 
-const motos = computed(() => (MOTOS.includes(matricula.value) ? MOTOS : [matricula.value, ...MOTOS]))
+// Si la moto del registro ya no está en la lista, se conserva como opción
+const motos = computed(() => (listaMotos.value.includes(matricula.value) ? listaMotos.value : [matricula.value, ...listaMotos.value]))
 const esEntrada = r.tipo === 'entrada'
 const hayMal = computed(() => Object.values(checks).some((v) => v === false))
 // Una salida debe llevar la moto de la entrada de ese mismo día

@@ -1,6 +1,7 @@
 export const EMPRESA = 'SUMINISTROS MÉDICOS ANDALUCES SA'
 
-// Motocicletas disponibles (matrículas). Añade o quita aquí si cambian.
+// Matrículas de reserva: se usan solo si no se puede leer la lista de motos de la base de datos.
+// La lista real la gestiona el administrador desde el panel (pestaña Motos).
 export const MOTOS = ['6610LTS', '6601LTS']
 
 // Elementos del checklist (mismo orden que el papel).

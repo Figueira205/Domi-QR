@@ -1,9 +1,12 @@
 <script setup>
-import { computed, reactive, ref } from 'vue'
-import { ELEMENTOS, MOTOS } from '../lib/config'
+import { computed, onMounted, reactive, ref } from 'vue'
+import { ELEMENTOS } from '../lib/config'
+import { motos, cargarMotos } from '../lib/motos'
 import PinGate from '../components/PinGate.vue'
 import ConfirmarReemplazo from '../components/ConfirmarReemplazo.vue'
 import { supabase, configurado } from '../lib/supabase'
+
+onMounted(cargarMotos)
 
 const empleado = ref(null)
 const pin = ref('')
@@ -54,6 +57,7 @@ async function enviar(reemplazar = false) {
   })
   enviando.value = false
   if (err) {
+    if (err.code === 'MO001') { error.value = 'Esa moto ya no está disponible. Elige otra de la lista.'; cargarMotos(); return }
     if (err.code === 'YA001') { duplicado.value = { hora: err.details || '' }; return }
     if (err.code === '28000') { error.value = 'Tu PIN ya no es válido. Vuelve a identificarte.'; cambiarEmpleado() }
     else error.value = 'No se pudo enviar. Inténtalo de nuevo.'
@@ -85,7 +89,7 @@ async function enviar(reemplazar = false) {
       <label for="m">Ciclomotor (matrícula)</label>
       <select id="m" v-model="matricula" required>
         <option value="" disabled>Selecciona la moto</option>
-        <option v-for="m in MOTOS" :key="m">{{ m }}</option>
+        <option v-for="m in motos" :key="m">{{ m }}</option>
       </select>
     </div>
 
