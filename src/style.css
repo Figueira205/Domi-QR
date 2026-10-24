@@ -32,3 +32,4 @@ th, td { border-bottom:1px solid var(--borde); padding:.45rem .4rem; text-align:
 .registro { cursor: pointer; }
 .registro.abierto { border-color: var(--rojo); }
 .pista { display: block; margin-top: .4rem; color: #8a8a90; }
+.grid3 { display:grid; grid-template-columns:repeat(3,1fr); gap:.6rem; }

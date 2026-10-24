@@ -81,6 +81,7 @@ El administrador entra en `/#/admin` con su contraseña.
 - Listado de registros con **filtros** por empleado, tipo (entrada/salida), moto y mes.
 - **Hoja mensual en PDF por empleado**, con el formato oficial de la empresa.
 - **Gestión de empleados**: crear, modificar y eliminar (nombre completo y PIN, sin PIN repetidos).
+- **Gestión de motos**: solo el administrador puede **añadir nuevas matrículas** (o quitarlas de la lista). Las motos nuevas aparecen al momento en los formularios de los empleados y del panel.
 - **Alta de registros pasados**, para días en que un empleado olvidó fichar.
 - **Modificar y eliminar cualquier registro**, sea quien sea quien lo creó: al tocar un registro aparecen las opciones *Modificar* y *Eliminar*. Al modificar se puede cambiar el empleado, el **día y la hora**, la moto, el estado y la incidencia. Antes de borrar se pide confirmación, porque el borrado es **permanente**.
 - **Estado de la moto e incidencias también en las salidas.** Al modificar o añadir una salida, el administrador puede marcar (de forma opcional) el estado de los 11 elementos al terminar el turno y anotar la **incidencia durante el turno**, si afecta a la seguridad y la actuación realizada.
@@ -149,6 +150,12 @@ Pensadas para el día a día real de la tienda:
     <td valign="top"><img src="docs/img/10-admin-editar.png" alt="Formulario para modificar un registro" width="420"></td>
   </tr>
 </table>
+
+**Gestión de motos (solo administrador):**
+
+<p align="center">
+  <img src="docs/img/13-admin-motos.png" alt="Pestaña Motos del panel de administración: añadir una matrícula y lista de motos" width="420">
+</p>
 
 **Modificar una salida:** además de la incidencia, se puede indicar el estado de la moto al terminar (opcional: solo se guardan los elementos marcados).
 
@@ -220,7 +227,8 @@ Los empleados **no leen ni escriben directamente en las tablas**: solo pueden ll
 │   ├── App.vue
 │   ├── style.css
 │   ├── lib/
-│   │   ├── config.js              # Motos y elementos del checklist
+│   │   ├── config.js              # Elementos del checklist (y motos de reserva)
+│   │   ├── motos.js               # Lista de motos cargada de la base de datos
 │   │   ├── supabase.js            # Cliente de Supabase
 │   │   ├── dias.js                # Día de trabajo, fechas y comprobación de duplicados
 │   │   ├── checks.js              # Estado opcional de la moto en las salidas
@@ -228,6 +236,7 @@ Los empleados **no leen ni escriben directamente en las tablas**: solo pueden ll
 │   ├── components/
 │   │   ├── PinGate.vue            # Pantalla de PIN
 │   │   ├── Empleados.vue          # Gestión de empleados
+│   │   ├── Motos.vue              # Gestión de motos (matrículas)
 │   │   ├── AnadirRegistro.vue     # Alta de registros pasados
 │   │   ├── EditarRegistro.vue     # Modificación de un registro
 │   │   ├── EstadoMoto.vue         # Listado Bien / Mal de los 11 elementos
@@ -242,6 +251,13 @@ Los empleados **no leen ni escriben directamente en las tablas**: solo pueden ll
 ```
 
 ## Modelo de datos
+
+**`motos`**
+
+| Columna | Tipo | Descripción |
+|---|---|---|
+| `matricula` | text | Matrícula en mayúsculas y sin espacios (por ejemplo `1234ABC`), clave primaria |
+| `created_at` | timestamptz | Fecha de alta |
 
 **`empleados`**
 
@@ -315,15 +331,15 @@ Usa rutas con `#` (modo *hash*) para que funcione en GitHub Pages sin configurac
 
 Edita [`src/lib/config.js`](src/lib/config.js) para cambiar:
 
-- **`MOTOS`**: matrículas disponibles en los desplegables.
+
 - **`ELEMENTOS`**: elementos del checklist, con su ayuda en pantalla y su etiqueta en la hoja PDF.
 
-Los empleados y sus PIN se gestionan desde el propio panel de administración.
+Los **empleados, sus PIN y las motos (matrículas)** se gestionan desde el propio panel de administración, sin tocar el código.
 
 ## Seguridad
 
 - Los empleados solo pueden **crear o sustituir su propio registro del día a través de funciones del servidor** que validan el PIN; no tienen acceso directo a las tablas y **no pueden leer la lista de empleados ni los PIN**.
-- La tabla `empleados` solo es accesible para el administrador autenticado, y solo él puede modificar o eliminar registros.
+- La tabla `empleados` solo es accesible para el administrador autenticado, y solo él puede modificar o eliminar registros y **añadir o quitar motos**. Los empleados solo pueden registrar una entrada con una moto de esa lista; la base de datos rechaza cualquier otra matrícula.
 - La clave que va en el navegador es la **clave pública** de Supabase; nunca se incluye la clave `service_role` ni contraseñas en el repositorio.
 
 Limitaciones conocidas, asumidas en esta primera versión:

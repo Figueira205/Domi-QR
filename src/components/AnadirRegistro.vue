@@ -1,6 +1,7 @@
 <script setup>
 import { computed, reactive, ref, watch } from 'vue'
-import { ELEMENTOS, MOTOS } from '../lib/config'
+import { ELEMENTOS } from '../lib/config'
+import { motos } from '../lib/motos'
 import { supabase } from '../lib/supabase'
 import { compactar } from '../lib/checks'
 import EstadoMoto from './EstadoMoto.vue'
@@ -138,7 +139,7 @@ async function guardar() {
       <label>Ciclomotor</label>
       <select v-model="matricula" required :disabled="Boolean(motoEntrada)">
         <option value="" disabled>Selecciona</option>
-        <option v-for="m in MOTOS" :key="m">{{ m }}</option>
+        <option v-for="m in motos" :key="m">{{ m }}</option>
       </select>
 
       <p v-if="tipo === 'salida' && motoEntrada"><small>La salida usa la moto de la entrada de ese día ({{ motoEntrada }}).</small></p>

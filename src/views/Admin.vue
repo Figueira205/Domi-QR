@@ -1,6 +1,8 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import { ELEMENTOS, MOTOS } from '../lib/config'
+import { ELEMENTOS } from '../lib/config'
+import { motos, cargarMotos } from '../lib/motos'
+import Motos from '../components/Motos.vue'
 import { supabase, configurado, ADMIN_EMAIL } from '../lib/supabase'
 import { generarHojaMensual } from '../lib/pdf'
 import AnadirRegistro from '../components/AnadirRegistro.vue'
@@ -65,7 +67,7 @@ async function cargarEmpleados() {
 }
 
 async function iniciar() {
-  await cargarEmpleados()
+  await Promise.all([cargarEmpleados(), cargarMotos()])
   cargar()
 }
 
@@ -163,12 +165,14 @@ onMounted(async () => {
   </form>
 
   <template v-else>
-    <div class="grid2" style="margin-bottom:1rem">
+    <div class="grid3" style="margin-bottom:1rem">
       <button :class="vista === 'registros' ? '' : 'sec'" @click="vista = 'registros'">Registros</button>
       <button :class="vista === 'empleados' ? '' : 'sec'" @click="vista = 'empleados'">Empleados</button>
+      <button :class="vista === 'motos' ? '' : 'sec'" @click="vista = 'motos'">Motos</button>
     </div>
 
     <Empleados v-if="vista === 'empleados'" :empleados="empleados" @cambio="cargarEmpleados" />
+    <Motos v-else-if="vista === 'motos'" />
 
     <template v-else>
     <div class="card">
@@ -192,7 +196,7 @@ onMounted(async () => {
           <label>Moto</label>
           <select v-model="filtros.matricula" @change="cargar">
             <option value="">Todas</option>
-            <option v-for="m in MOTOS" :key="m">{{ m }}</option>
+            <option v-for="m in motos" :key="m">{{ m }}</option>
           </select>
         </div>
         <div>

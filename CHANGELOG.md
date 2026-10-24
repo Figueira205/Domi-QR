@@ -3,6 +3,17 @@
 Todos los cambios relevantes del proyecto se documentan en este archivo.
 El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 
+## [1.4.0] - 2026-10-24
+
+### Añadido
+- **Gestión de motos para el administrador**: nueva pestaña *Motos* en el panel para añadir matrículas nuevas y quitar las que ya no se usen. Las matrículas se normalizan (mayúsculas, sin espacios ni guiones) y no se pueden repetir.
+- Tabla `motos` en la base de datos: cualquiera puede leer la lista (la usan los formularios), pero **solo el administrador puede añadir, modificar o quitar motos**.
+- La entrada de un empleado solo se acepta con una moto de esa lista; la base de datos rechaza cualquier otra matrícula.
+
+### Cambiado
+- Las listas de motos de los formularios y del panel salen ahora de la base de datos. La lista de `config.js` queda solo como reserva si no se puede leer.
+- Se quita el permiso público de ejecución de la función interna del disparador de salidas.
+
 ## [1.3.1] - 2026-10-11
 
 ### Corregido

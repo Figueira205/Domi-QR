@@ -17,6 +17,11 @@ create table if not exists public.empleados (
   constraint empleados_pin_unico unique (pin)
 );
 
+create table if not exists public.motos (
+  matricula text primary key check (matricula ~ '^[A-Z0-9]{4,10}$'),   -- en mayúsculas y sin espacios
+  created_at timestamptz not null default now()
+);
+
 create table if not exists public.registros (
   id uuid primary key default gen_random_uuid(),
   created_at timestamptz not null default now(),
@@ -45,6 +50,7 @@ create unique index if not exists registros_unico_por_dia
 -- ---------------------------------------------------------------------
 alter table public.empleados enable row level security;
 alter table public.registros enable row level security;
+alter table public.motos enable row level security;
 
 -- Empleados: solo el administrador (crear, leer, modificar, borrar)
 drop policy if exists "admin gestiona empleados" on public.empleados;
@@ -52,6 +58,27 @@ create policy "admin gestiona empleados" on public.empleados
   for all to authenticated
   using ((select auth.jwt() ->> 'email') = 'admin@ejemplo.com')
   with check ((select auth.jwt() ->> 'email') = 'admin@ejemplo.com');
+
+-- Motos: cualquiera puede ver la lista (la usan los formularios); solo el administrador la gestiona
+drop policy if exists "ver motos" on public.motos;
+create policy "ver motos" on public.motos
+  for select to anon, authenticated using (true);
+
+drop policy if exists "admin anade motos" on public.motos;
+create policy "admin anade motos" on public.motos
+  for insert to authenticated
+  with check ((select auth.jwt() ->> 'email') = 'admin@ejemplo.com');
+
+drop policy if exists "admin modifica motos" on public.motos;
+create policy "admin modifica motos" on public.motos
+  for update to authenticated
+  using ((select auth.jwt() ->> 'email') = 'admin@ejemplo.com')
+  with check ((select auth.jwt() ->> 'email') = 'admin@ejemplo.com');
+
+drop policy if exists "admin elimina motos" on public.motos;
+create policy "admin elimina motos" on public.motos
+  for delete to authenticated
+  using ((select auth.jwt() ->> 'email') = 'admin@ejemplo.com');
 
 -- Registros: los empleados NO acceden a la tabla; registran mediante registrar_turno().
 -- El administrador puede añadir registros pasados desde el panel.
@@ -147,6 +174,11 @@ begin
     raise exception 'Tipo no válido' using errcode = '22023';
   end if;
 
+  -- La moto de una entrada debe estar en la lista que gestiona el administrador
+  if p_tipo = 'entrada' and not exists (select 1 from public.motos where matricula = v_matricula) then
+    raise exception 'MOTO_INVALIDA' using errcode = 'MO001';
+  end if;
+
   -- Día de trabajo
   v_dia := v_local::date;
   if p_tipo = 'salida' and v_local::time < time '01:31' then
@@ -226,6 +258,8 @@ begin
 end;
 $$;
 
+revoke execute on function public.registros_salida_con_entrada() from public, anon, authenticated;
+
 drop trigger if exists registros_salida_con_entrada on public.registros;
 create trigger registros_salida_con_entrada
   before insert or update on public.registros
@@ -241,6 +275,7 @@ grant execute on function public.registrar_turno(text, uuid, text, text, jsonb, 
 -- ---------------------------------------------------------------------
 --  Datos de ejemplo (opcional, descomenta y cambia los PIN)
 -- ---------------------------------------------------------------------
+-- insert into public.motos (matricula) values ('1234ABC'), ('5678DEF');
 -- insert into public.empleados (nombre, pin) values
 --   ('NOMBRE APELLIDO', '1234'),
 --   ('OTRO EMPLEADO',   '5678');
